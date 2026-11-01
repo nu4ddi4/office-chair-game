@@ -58,6 +58,8 @@ function Get-HelperFailure($Helper,[string]$Stage,[int]$TimeoutSeconds) {
     }
     $details -join '; '
 }
+Expect (Test-NewerUpdateVersion '0.5.1' '0.5.0') 'stable upgrades compare without prerelease fields'
+Expect (-not (Test-NewerUpdateVersion '0.5.0' '0.5.0')) 'equal stable versions stay installed'
 Expect (-not (Test-NewerUpdateVersion '0.4.9' '0.5.0-beta.1')) 'channel switch rejects a lower stable core'
 Expect (Test-NewerUpdateVersion '0.5.0' '0.5.0-beta.1') 'same-core stable advances a beta'
 Expect (-not (Test-NewerUpdateVersion '0.5.0-beta.99' '0.5.0')) 'same-core beta cannot downgrade stable'

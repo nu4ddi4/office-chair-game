@@ -119,8 +119,8 @@ function Assert-UpdateBuild($Info) {
 function Test-NewerUpdateVersion([string]$Remote,[string]$Current) {
     $a=$Remote.Split('-')[0].Split('.');$b=$Current.Split('-')[0].Split('.')
     for($i=0;$i -lt 3;$i++){if([int]$a[$i] -ne [int]$b[$i]){return [int]$a[$i] -gt [int]$b[$i]}}
-    $ap=if($Remote.Contains('-')){$Remote.Substring($Remote.IndexOf('-')+1).Split('.')}else{@()}
-    $bp=if($Current.Contains('-')){$Current.Substring($Current.IndexOf('-')+1).Split('.')}else{@()}
+    $ap=@(if($Remote.Contains('-')){$Remote.Substring($Remote.IndexOf('-')+1).Split('.')})
+    $bp=@(if($Current.Contains('-')){$Current.Substring($Current.IndexOf('-')+1).Split('.')})
     if($Remote -ceq $Current){return $false};if(-not $ap.Count){return $true};if(-not $bp.Count){return $false}
     for($i=0;$i -lt [Math]::Min($ap.Count,$bp.Count);$i++){
         if($ap[$i] -ceq $bp[$i]){continue}
