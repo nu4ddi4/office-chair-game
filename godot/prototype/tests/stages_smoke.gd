@@ -34,7 +34,8 @@ func run(game: InvestigationPrototype):
 	await capture(game,"01-intro")
 	ui.entry.finish_intro()
 	check(ui.mode == "field" and game.player.enabled and game.state.stage.index == 1,"Introduction opens the explorable office")
-	check(game.player.third_person and game.stage_world.avatar.get_child_count() > 4,"The employee character and third-person camera are present")
+	check(game.player.camera.get_parent() == game.player and absf(game.player.camera.position.z) < .01 and not game.stage_world.avatar.visible,"The office starts in first person without the avatar blocking the view")
+	await field_hud_checks(game)
 	await capture(game,"office-character")
 	ui.open_stage_picker()
 	check("???" in ui.picks.get_child(1).text,"Unentered stage names are hidden")
@@ -87,6 +88,7 @@ func run(game: InvestigationPrototype):
 	ui.open_stage_picker()
 	ui.picks.get_child(2).pressed.emit()
 	check(game.stage_world.originals.is_empty(),"Selecting the failed stage restores its broken equipment")
+	check(game.player.camera.get_parent() == game.player and absf(game.player.camera.position.z) < .01,"Retry restores the first-person camera after the explosion")
 	check(ui.mode == "field" and game.state.stage.index == 3 and game.state.stage.cleared == [1,2],"Retry immediately restores only the failed stage")
 	enter(game,"hlpe")
 	check(game.state.stage.phase == "exploded" and game.state.stage.blasts == 2,"A typo also explodes a dangerous PC")
@@ -101,7 +103,40 @@ func run(game: InvestigationPrototype):
 	ui.talk_to("oh")
 	check(ui.mode == "stage_dialogue","NPC interaction opens conversation")
 	await capture(game,"npc-conversation")
-	ui.command_result(game.dispatch({"type":"stage.talk","payload":{"choice":0}}))
+	var dialogue_size = game.get_window().size
+	game.get_window().size = Vector2i(960,540)
+	game._fit_screen()
+	ui.fit_screen()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ui.stage_scroll.ensure_control_visible(ui.stage_choices.get_child(2))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	check(game.safe_rect().grow(1).encloses(ui.stage_choices.get_child(2).get_global_rect()),"Last dialogue choice can be reached on a short screen")
+	await capture(game,"npc-short-screen")
+	game.get_window().size = dialogue_size
+	game._fit_screen()
+	ui.fit_screen()
+	ui.stage_scroll.scroll_vertical = 0
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var option = ui.stage_choices.get_child(0)
+	check(option.size.x >= 200 and option.size.y >= 48,"NPC choices have a readable width and height")
+	var click = InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = get_viewport().get_final_transform()*option.get_global_rect().get_center()
+	click.global_position = click.position
+	click.button_mask = MOUSE_BUTTON_MASK_LEFT
+	Input.parse_input_event(click)
+	Input.flush_buffered_events()
+	await get_tree().process_frame
+	var release = click.duplicate()
+	release.pressed = false
+	release.button_mask = 0
+	Input.parse_input_event(release)
+	Input.flush_buffered_events()
+	await get_tree().process_frame
 	check(game.state.stage.phase == "exploded","A wrong conversation choice can fail outside the terminal")
 	ui.retry_stage()
 	ui.talk_to("oh")
@@ -209,3 +244,51 @@ func run(game: InvestigationPrototype):
 	var summary = {"passed":failures.is_empty(),"failures":failures,"platform":OS.get_name(),"mobile":game.controls.mobile,"touchDefault":touch_default,"keyboardDetected":game.controls.keyboard_seen,"stages":6,"blasts":game.state.stage.blasts}
 	print("INVESTIGATION_SMOKE ",JSON.stringify(summary))
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+func field_hud_checks(game):
+	var ui = game.ui
+	var original_size = game.get_window().size
+	for dimensions in [Vector2i(1226,1033),Vector2i(1280,720),Vector2i(960,540),Vector2i(540,960)]:
+		game.get_window().size = dimensions
+		game._fit_screen()
+		ui.fit_screen()
+		game.review_target("oh")
+		for frame in range(3): await get_tree().physics_frame
+		game._use("park","npc",true)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		ui.fit_field_overlays()
+		await get_tree().process_frame
+		var bounds = game.safe_rect().grow(1)
+		check(ui.field_objective.size.x >= 300 and bounds.encloses(ui.field_objective.get_global_rect()),"Objective fits horizontally at "+str(dimensions))
+		check(ui.toast.size.x >= 300 and ui.toast.size.y < 180 and bounds.encloses(ui.toast.get_global_rect()),"Wrong-NPC notice stays readable at "+str(dimensions))
+		check(ui.prompt_panel.visible and ui.prompt_panel.size.x >= 220 and ui.prompt_panel.size.y < 160 and bounds.encloses(ui.prompt_panel.get_global_rect()),"Interaction chip stays horizontal and visible at "+str(dimensions))
+		for overlay in [ui.field_objective,ui.toast,ui.prompt_panel,ui.update_hud,ui.dot]:
+			check(ignores_pointer(overlay),"Every passive HUD descendant ignores mouse input")
+		if not game.controls.mobile and DisplayServer.get_name() != "headless":
+			game.player.application_focused = true
+			game.player.capture_suspended = false
+			game.player.set_enabled(true)
+			for overlay in [ui.field_objective,ui.toast,ui.prompt_panel]:
+				var before = game.player.rotation.y
+				var motion = InputEventMouseMotion.new()
+				motion.position = get_viewport().get_final_transform()*overlay.get_global_rect().get_center()
+				motion.global_position = motion.position
+				motion.relative = get_viewport().get_final_transform().basis_xform(Vector2(3,0))
+				Input.parse_input_event(motion)
+				Input.flush_buffered_events()
+				await get_tree().process_frame
+				check(absf(game.player.rotation.y-before+3*game.player.sensitivity) < .0001,"Mouse look continues exactly once over HUD text")
+		await capture(game,"field-%dx%d" % [dimensions.x,dimensions.y])
+	game.get_window().size = original_size
+	game._fit_screen()
+	ui.fit_screen()
+	ui.message.text = ""
+	ui.toast.hide()
+	game.reset_player_pose()
+
+func ignores_pointer(node: Node) -> bool:
+	if node is Control and node.mouse_filter != Control.MOUSE_FILTER_IGNORE: return false
+	for child in node.get_children():
+		if not ignores_pointer(child): return false
+	return true
