@@ -47,8 +47,12 @@ func _init():
 	for url in ["https://evil.example/a.exe","http://release-assets.githubusercontent.com/a.exe","https://release-assets.githubusercontent.com.evil/a.exe","https://user@release-assets.githubusercontent.com/a.exe","https://release-assets.githubusercontent.com/a.exe#b"]:
 		expect(not Policy.trusted_redirect(url,source,false),"redirect origin")
 	expect(Policy.trusted_redirect("https://release-assets.githubusercontent.com/a/b?sig=c&x=1",source,false),"GitHub asset redirect")
-	for entry in [["dev",true,["dev"]],["stable",false,["stable"]],["stable",true,["stable","beta"]],["beta",true,["stable","beta"]],["beta",false,["stable"]],["other",true,[]]]:
+	for entry in [["dev",true,["dev"]],["stable",false,["stable"]],["stable",true,["beta"]],["beta",true,["beta"]],["beta",false,["stable"]],["other",true,[]]]:
 		expect(Policy.channels_to_check(entry[0],entry[1])==entry[2],"channels followed by "+entry[0]+(" with preview" if entry[1] else ""))
+	expect(not Policy.newer("0.4.9","0.5.0-beta.1"),"A channel change cannot downgrade the core version")
+	expect(Policy.newer("0.5.0","0.5.0-beta.1"),"Beta can advance to the same-core final release")
+	expect(not Policy.newer("0.5.0-beta.99","0.5.0"),"Stable cannot move backwards to the same-core beta")
+	expect(Policy.newer("0.7.1-beta.9999999999999999999999999999999","0.7.1-beta.9999999999999999999999999999998"),"Large numeric prerelease identifiers compare without overflow")
 	var updater = Updater.new()
 	expect(updater.state=="disabled" and not updater.enabled and not updater.consent_granted,"idle source cannot update")
 	updater.free()

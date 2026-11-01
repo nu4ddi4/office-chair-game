@@ -196,8 +196,8 @@ def main():
         export_pack(godot, target, pack)
         info_file = target / 'prototype/build_info.json'
         original_info = info_file.read_text(encoding='utf-8')
-        major, minor, patch, _ = parts(version)
-        probe_version = '%d.%d.%d' % (major, minor, patch + 1)
+        major, minor, patch, pre = parts(version)
+        probe_version = ('%d.%d.%d-beta.%d' % (major, minor, patch, pre + 1)) if pre else ('%d.%d.%d' % (major, minor, patch + 1))
         info_file.write_text(json.dumps(dict(json.loads(original_info), version=probe_version, commit='f' * 40)), encoding='utf-8')
         probe_directory = Path(tempfile.mkdtemp(prefix='security-lab-probe-'))
         probe = probe_directory / 'probe.pck'

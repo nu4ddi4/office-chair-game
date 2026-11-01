@@ -20,6 +20,7 @@ class ReplacementFailedStore extends InvestigationStore:
 		return false
 
 class DialogTestUpdater extends InvestigationInstallerUpdates:
+	func selected_channel() -> String: return info.get("channel","beta")
 	var preparing_parent: Node
 	var preparing_visible = false
 	func installed_identity_valid() -> bool: return true

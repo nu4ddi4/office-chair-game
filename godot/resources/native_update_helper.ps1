@@ -110,6 +110,9 @@ function Start-UpdateProcess([string]$Executable, [string[]]$Parameters) {
 function Assert-UpdateBuild($Info) {
     if ($Info.schema -ne 1 -or $Info.app_id -notin @('security-lab-native','security-lab-beta') -or $Info.platform -ne 'windows-x86_64' -or $Info.install_layout -ne 1 -or $Info.channel -notin @('stable','beta','dev') -or $Info.commit -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid build identity' }
     if ($Info.version -cnotmatch '^(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})(?:-([0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*))?$') { throw 'Invalid version' }
+    if ($Info.version.Length -gt 96) { throw 'Version too long' }
+    foreach ($part in $Info.version.Split('-')[0].Split('.')) { if ([int]$part -gt 65535) { throw 'Version component too large' } }
+    if ($Info.version.Contains('-')) { foreach ($part in $Info.version.Substring($Info.version.IndexOf('-')+1).Split('.')) { if ($part -match '^[0-9]+$' -and $part.Length -gt 1 -and $part.StartsWith('0')) { throw 'Invalid numeric prerelease' } } }
     if ($Info.channel -eq 'stable' -and $Info.version.Contains('-')) { throw 'Stable rejects prerelease versions' }
     if ($Info.channel -ne 'stable' -and $Info.version -cnotmatch ('-'+$Info.channel+'[.]')) { throw 'Prerelease channel mismatch' }
 }
@@ -122,7 +125,7 @@ function Test-NewerUpdateVersion([string]$Remote,[string]$Current) {
     for($i=0;$i -lt [Math]::Min($ap.Count,$bp.Count);$i++){
         if($ap[$i] -ceq $bp[$i]){continue}
         $an=$ap[$i] -match '^[0-9]+$';$bn=$bp[$i] -match '^[0-9]+$'
-        if($an -and $bn){return [decimal]$ap[$i] -gt [decimal]$bp[$i]};if($an -ne $bn){return -not $an}
+        if($an -and $bn){if($ap[$i].Length -ne $bp[$i].Length){return $ap[$i].Length -gt $bp[$i].Length};return [String]::CompareOrdinal($ap[$i],$bp[$i]) -gt 0};if($an -ne $bn){return -not $an}
         return [String]::CompareOrdinal($ap[$i],$bp[$i]) -gt 0
     }
     return $ap.Count -gt $bp.Count

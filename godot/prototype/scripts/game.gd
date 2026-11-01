@@ -287,13 +287,19 @@ func _use(id: String, kind: String, tool: bool):
 		ui.open_terminal()
 	else: ui.notice(content.case.devices[id].description)
 
-func beta_preview() -> bool:
-	var beta_build = updater.info.get("channel") == "beta" if updater != null else updates.installed.get("prerelease",true)
-	return controls.beta_preview_enabled(beta_build)
+func update_channel() -> String:
+	var own = updater.info.get("channel","stable") if updater != null else updates.installed.get("channel","beta" if updates.installed.get("prerelease",true) else "stable")
+	return controls.update_channel(own)
+
+func beta_preview() -> bool: return update_channel() == "beta"
+
+func update_channel_changed():
+	if updater != null: updater.channel_changed()
+	else: updates.check(update_channel())
 
 func check_updates():
 	if updater != null: updater.check()
-	else: updates.check(beta_preview())
+	else: updates.check(update_channel())
 
 func frame_speaker(id: String):
 	if not targets.has(id): return
@@ -361,6 +367,16 @@ func save_state(candidate: Dictionary) -> bool:
 	saving = false
 	return saved
 
+func commit_stage_transition(action: Dictionary) -> bool:
+	if blocked_save: return false
+	var result = engine.step(state,action)
+	if result.state == state: return false
+	if not save_state(result.state): return false
+	state = result.state
+	if investigation_environment != null: investigation_environment.sync(state)
+	ui.refresh()
+	return true
+
 func new_game():
 	if not preserve_current(): return
 	var candidate = engine.create_state()
@@ -379,6 +395,8 @@ func new_game():
 func quit_game():
 	if updater != null and updater.state == "preparing": return
 	if not blocked_save and not save_now(): return
+	if updater != null: updater.cancel_pending()
+	updates.cancel_check()
 	get_tree().quit()
 
 func reset_player_pose():
@@ -396,6 +414,10 @@ func preserve_current() -> bool:
 
 # Returns how many files were removed.
 func reset_all_data() -> int:
+	if updater != null:
+		if updater.state == "preparing": return 0
+		updater.cancel_pending()
+	updates.cancel_check()
 	var removed = InvestigationDataReset.wipe(InvestigationDataReset.targets(self))
 	state = engine.create_state()
 	session_available = true

@@ -11,12 +11,20 @@ const MAX_CONTENT_BYTES = 268435456
 static func manifest_url(channel: String, app_id: String = APP_ID) -> String:
 	return REPOSITORY+("beta-channel-" if app_id=="security-lab-beta" else "native-channel-")+channel+"/update.json" if channel in CHANNELS and app_id in [APP_ID,"security-lab-beta"] else ""
 
-# Dev builds only follow dev. Stable and beta builds always watch stable, so a
-# promoted release reaches beta testers, and add beta when the preview is on.
+# Each installation follows exactly one chosen channel; dev remains isolated.
 static func channels_to_check(own: String, preview: bool) -> Array:
 	if own not in CHANNELS: return []
 	if own == "dev": return ["dev"]
-	return ["stable","beta"] if preview else ["stable"]
+	return ["beta"] if preview else ["stable"]
+
+static func chosen_channel(config: ConfigFile, own: String) -> String:
+	if own == "dev": return "dev"
+	var selected = config.get_value("updates","channel","")
+	if selected is String and selected in ["stable","beta"]: return selected
+	if config.has_section_key("updates","beta_preview"):
+		var legacy = config.get_value("updates","beta_preview")
+		if legacy is bool: return "beta" if legacy else "stable"
+	return "beta" if own == "beta" else "stable"
 
 static func preference_path(channel: String, app_id: String = APP_ID) -> String:
 	return "user://"+("beta-update-settings-" if app_id=="security-lab-beta" else "update-settings-")+channel+".json" if channel in CHANNELS else ""
@@ -54,7 +62,9 @@ static func newer(remote: String, current: String) -> bool:
 	var ap = a[3].split("."); var bp = b[3].split(".")
 	for i in range(min(ap.size(),bp.size())):
 		if ap[i]==bp[i]: continue
-		if ap[i].is_valid_int() and bp[i].is_valid_int(): return int(ap[i])>int(bp[i])
+		if ap[i].is_valid_int() and bp[i].is_valid_int():
+			if ap[i].length()!=bp[i].length(): return ap[i].length()>bp[i].length()
+			return ap[i]>bp[i]
 		if ap[i].is_valid_int()!=bp[i].is_valid_int(): return not ap[i].is_valid_int()
 		return ap[i]>bp[i]
 	return ap.size()>bp.size()
