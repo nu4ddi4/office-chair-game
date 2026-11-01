@@ -63,6 +63,17 @@ func run(game: InvestigationPrototype):
 	check(game.controls.keyboard_seen and game.state.stage.phase == "clear","Real Enter executes a terminal command and detects a keyboard")
 	if game.state.stage.phase != "clear": enter(game,"status")
 	await capture(game,"04-clear")
+	var saved_directory = game.store.directory
+	var blocker = saved_directory.path_join("blocked-advance")
+	var blocked_file = FileAccess.open(blocker,FileAccess.WRITE)
+	blocked_file.store_string("not a directory")
+	blocked_file.close()
+	game.store.directory = blocker
+	ui.result_next.pressed.emit()
+	check(game.state.stage.index == 1 and game.state.stage.phase == "clear","A failed save cannot advance or discard the completed stage")
+	ui.toggle()
+	game.store.directory = saved_directory
+	DirAccess.remove_absolute(blocker)
 	ui.result_next.pressed.emit()
 	check(game.state.stage.index == 2,"One button advances to the next stage")
 	var before = game.state.duplicate(true)
@@ -85,6 +96,10 @@ func run(game: InvestigationPrototype):
 	check(not game.detailed_world or game.stage_world.originals.size() > 0,"Explosion breaks the actual equipment mesh")
 	await capture(game,"05-explosion")
 	await get_tree().create_timer(.85).timeout
+	ui.close()
+	check(ui.mode == "pause" and not game.player.enabled,"Closing failure results keeps the broken stage paused")
+	ui.close()
+	check(ui.mode == "exploded" and not game.player.enabled,"Continuing a failed stage returns to retry actions")
 	ui.open_stage_picker()
 	ui.picks.get_child(2).pressed.emit()
 	check(game.stage_world.originals.is_empty(),"Selecting the failed stage restores its broken equipment")
@@ -177,7 +192,7 @@ func run(game: InvestigationPrototype):
 	ui.current_attempt = ""
 	ui.begin_stage()
 	enter(game,"exit")
-	check(ui.mode == "pause" and not ui.command_input.has_focus(),"Exit returns to the menu without hidden terminal focus")
+	check(ui.mode == "field" and game.player.enabled and not ui.command_input.has_focus(),"Exit closes the terminal and returns to movement")
 	var original_bindings = game.bindings.bindings.duplicate(true)
 	game.bindings.bindings.pause = [KEY_P]
 	game.bindings.apply()
@@ -193,7 +208,9 @@ func run(game: InvestigationPrototype):
 	key.pressed = false
 	Input.parse_input_event(key.duplicate())
 	Input.flush_buffered_events()
-	check(ui.mode == "pause","Stage-game Escape remains available with an older custom movement profile")
+	check(ui.mode == "field","Escape closes the terminal with an older custom movement profile")
+	ui.toggle()
+	check(ui.mode == "pause","The next Escape opens the game menu")
 	ui.close()
 	check(ui.mode == "field" and game.player.enabled,"Closing pause resumes movement")
 	ui.open_pause()
@@ -204,8 +221,21 @@ func run(game: InvestigationPrototype):
 	var review = load("res://prototype/tests/smoke.gd").new()
 	add_child(review)
 	await review.settings_dialog_checks(game,failures)
+	var locked = AcceptDialog.new()
+	locked.dialog_text = "설치 준비 중"
+	locked.dialog_close_on_escape = false
+	ui.dialog_parent().add_child(locked)
+	locked.popup_centered(Vector2i(320,160))
+	await get_tree().process_frame
+	ui.toggle()
+	check(locked.visible,"Escape cannot dismiss an installation-preparation window")
+	locked.hide()
+	locked.queue_free()
+	ui.settings_screen.select_category("general")
+	await get_tree().process_frame
+	check(ui.channel_setting.item_count == 2,"Update settings expose one stable/beta channel selector")
 	await capture(game,"07-settings")
-	ui.settings_screen.close_editor()
+	ui.toggle()
 	check(ui.mode == "pause" and not game.player.enabled,"Settings return to the pause menu")
 	var original = game.get_window().size
 	for dimensions in [Vector2i(1280,720),Vector2i(1024,768),Vector2i(960,540),Vector2i(540,960)]:

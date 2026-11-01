@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 
 
 def main():
@@ -17,7 +18,7 @@ def main():
     parser.add_argument('--results', default='godot/tests/results/updater-network.json')
     args = parser.parse_args()
     payload = b'MZ' + b'fixture payload; never executed'.ljust(4094, b'\0')
-    server_modes = ['no-consent', 'declined', 'dialog-dismiss', 'dialog-close', 'dialog-confirm', 'ready', 'redirect-ready', 'hash-failure', 'size-failure', 'channel-failure', 'redirect-failure', 'oversized-manifest', 'no-local-option', 'disabled', 'helper-launch', 'save-failure', 'health-validation', 'bad-save-health', 'retry-after-failure', 'preview-newer-stable', 'preview-other-down', 'preview-off', 'content-update', 'content-mismatch', 'content-rejected']
+    server_modes = ['no-consent', 'declined', 'dialog-dismiss', 'dialog-close', 'dialog-confirm', 'ready', 'redirect-ready', 'hash-failure', 'size-failure', 'channel-failure', 'redirect-failure', 'oversized-manifest', 'no-local-option', 'disabled', 'helper-launch', 'save-failure', 'health-validation', 'bad-save-health', 'retry-after-failure', 'preview-newer-stable', 'preview-other-down', 'preview-off', 'content-update', 'content-mismatch', 'content-rejected', 'switch-inflight', 'switch-consent', 'switch-ready', 'stable-older', 'same-version', 'selected-channel-down', 'invalid-other-source']
     content_payload = b'PCK' + b'fixture game-data pack'.ljust(2045, b'\0')
     skipped = []
     if platform.system() != 'Windows':
@@ -46,10 +47,10 @@ def main():
                     requests.append(self.path)
                     if mode == 'retry-after-failure' and self.path == '/beta/update.json' and requests.count(self.path) == 1:
                         self.send_error(500); return
-                    if self.path in ['/stable/update.json', '/stable/SecurityLabSetup.exe'] and mode == 'preview-other-down':
+                    if self.path in ['/stable/update.json', '/stable/SecurityLabSetup.exe'] and mode in ['preview-other-down', 'selected-channel-down']:
                         self.send_error(404); return
                     if self.path == '/stable/update.json':
-                        manifest = {'schema': 1, 'app_id': 'security-lab-beta', 'platform': 'windows-x86_64', 'install_layout': 1, 'channel': 'stable', 'version': '0.9.0', 'commit': 'c' * 40, 'sha256': hashlib.sha256(payload).hexdigest(), 'exe_sha256': 'a' * 64, 'size': len(payload), 'installer_url': f'http://127.0.0.1:{self.server.server_port}/stable/SecurityLabSetup.exe'}
+                        manifest = {'schema': 1, 'app_id': 'security-lab-beta', 'platform': 'windows-x86_64', 'install_layout': 1, 'channel': 'stable', 'version': '0.7.9' if mode == 'stable-older' else '0.9.0', 'commit': 'c' * 40, 'sha256': hashlib.sha256(payload).hexdigest(), 'exe_sha256': 'a' * 64, 'size': len(payload), 'installer_url': f'http://127.0.0.1:{self.server.server_port}/stable/SecurityLabSetup.exe'}
                         body = json.dumps(manifest).encode()
                         self.send_response(200); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body); return
                     if mode == 'redirect-failure':
@@ -57,21 +58,25 @@ def main():
                     if mode == 'redirect-ready' and self.path == '/beta/update.json':
                         self.send_response(302); self.send_header('Location', f'http://127.0.0.1:{self.server.server_port}/redirect-manifest'); self.end_headers(); return
                     if self.path in ['/beta/update.json', '/redirect-manifest']:
-                        manifest = {'schema': 1, 'app_id': 'security-lab-beta', 'platform': 'windows-x86_64', 'install_layout': 1, 'channel': 'dev' if mode == 'channel-failure' else 'beta', 'version': '0.8.1-beta.1', 'commit': 'a' * 40, 'sha256': 'b' * 64 if mode == 'hash-failure' else hashlib.sha256(payload).hexdigest(), 'exe_sha256': 'a' * 64, 'size': len(payload) + (1 if mode == 'size-failure' else 0), 'installer_url': f'http://127.0.0.1:{self.server.server_port}/beta/SecurityLabSetup.exe'}
+                        if mode == 'switch-inflight': time.sleep(.4)
+                        manifest = {'schema': 1, 'app_id': 'security-lab-beta', 'platform': 'windows-x86_64', 'install_layout': 1, 'channel': 'dev' if mode == 'channel-failure' else 'beta', 'version': '0.8.0-beta.1' if mode == 'same-version' else '0.8.1-beta.1', 'commit': 'a' * 40, 'sha256': 'b' * 64 if mode == 'hash-failure' else hashlib.sha256(payload).hexdigest(), 'exe_sha256': 'a' * 64, 'size': len(payload) + (1 if mode == 'size-failure' else 0), 'installer_url': f'http://127.0.0.1:{self.server.server_port}/beta/SecurityLabSetup.exe'}
                         if mode.startswith('content-'):
                             manifest.update({'compat': 'e' * 64 if mode == 'content-mismatch' else 'd' * 64, 'content_url': f'http://127.0.0.1:{self.server.server_port}/beta/SecurityLabContent.pck', 'content_sha256': hashlib.sha256(content_payload).hexdigest(), 'content_size': len(content_payload)})
                         body = b'x' * 20000 if mode == 'oversized-manifest' else json.dumps(manifest).encode()
                     elif self.path in ['/beta/SecurityLabSetup.exe', '/stable/SecurityLabSetup.exe']: body = payload
                     elif self.path == '/beta/SecurityLabContent.pck': body = content_payload
                     else: self.send_error(404); return
-                    self.send_response(200); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
+                    self.send_response(200); self.send_header('Content-Length', str(len(body))); self.end_headers()
+                    try: self.wfile.write(body)
+                    except (BrokenPipeError, ConnectionResetError): pass
 
                 def log_message(self, *_): pass
 
             server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
             thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
             command = [args.godot, '--headless', '--path', str(project), '--script', 'res://fixture.gd', '--', '--force-update-check', f'--update-url=http://127.0.0.1:{server.server_port}/beta/update.json', f'--fixture-mode={mode}']
-            if mode.startswith('preview-'): command.append(f'--update-url-other=http://127.0.0.1:{server.server_port}/stable/update.json')
+            if mode.startswith('preview-') or mode in ['switch-inflight','switch-consent','switch-ready','stable-older','selected-channel-down']: command.append(f'--update-url-other=http://127.0.0.1:{server.server_port}/stable/update.json')
+            if mode == 'invalid-other-source': command.append(f'--update-url-other=http://127.0.0.1:{server.server_port}/beta/update.json')
             if mode != 'no-local-option': command.append('--allow-local-update-url')
             if mode == 'disabled': command.append('--disable-updates')
             try:
@@ -80,7 +85,7 @@ def main():
             lines = [line[len('NATIVE_UPDATE_NETWORK '):] for line in run.stdout.splitlines() if line.startswith('NATIVE_UPDATE_NETWORK ')]
             if run.returncode or not lines or not json.loads(lines[-1])['passed'] or 'SCRIPT ERROR:' in run.stderr:
                 raise SystemExit(run.stdout + run.stderr)
-            if mode in ['disabled', 'no-local-option'] and requests:
+            if mode in ['disabled', 'no-local-option', 'invalid-other-source'] and requests:
                 raise SystemExit('Disabled/disallowed updater sent a request')
             if mode in ['channel-failure', 'no-consent', 'declined', 'dialog-dismiss', 'dialog-close'] and '/beta/SecurityLabSetup.exe' in requests:
                 raise SystemExit('Unapproved or cross-channel manifest triggered download')
@@ -88,17 +93,27 @@ def main():
                 raise SystemExit('A compatible executable did not take only the game-data pack')
             if mode in ['content-mismatch', 'content-rejected'] and (requests.count('/beta/SecurityLabSetup.exe') != 1 or '/beta/SecurityLabContent.pck' in requests):
                 raise SystemExit('An incompatible or rejected pack was not replaced by the full installer')
-            if mode in ['ready', 'redirect-ready', 'dialog-confirm', 'preview-other-down'] and requests.count('/beta/SecurityLabSetup.exe') != 1:
+            if mode in ['ready', 'redirect-ready', 'dialog-confirm', 'preview-other-down', 'preview-newer-stable'] and requests.count('/beta/SecurityLabSetup.exe') != 1:
                 raise SystemExit('Approved update did not download exactly once')
-            if mode in ['preview-newer-stable', 'preview-off']:
+            if mode == 'preview-newer-stable' and any(path.startswith('/stable/') for path in requests):
+                raise SystemExit('Selected beta channel unexpectedly read stable')
+            if mode == 'preview-off':
                 if requests.count('/stable/SecurityLabSetup.exe') != 1 or '/beta/SecurityLabSetup.exe' in requests:
                     raise SystemExit('The newer stable release was not the only download')
             if mode == 'preview-off' and '/beta/update.json' in requests:
                 raise SystemExit('Beta preview off still read the beta channel')
             if mode == 'retry-after-failure' and requests.count('/beta/update.json') != 2:
                 raise SystemExit('A failed check was not repeatable')
-            if not mode.startswith('preview-') and any(path.startswith('/stable/') for path in requests):
+            if not mode.startswith('preview-') and mode not in ['switch-inflight','switch-consent','switch-ready','stable-older','selected-channel-down'] and any(path.startswith('/stable/') for path in requests):
                 raise SystemExit('A single-channel check read another channel')
+            if mode in ['switch-inflight','switch-consent'] and ('/beta/SecurityLabSetup.exe' in requests or requests.count('/stable/SecurityLabSetup.exe') != 1):
+                raise SystemExit('A canceled channel request or dialog authorized the wrong payload')
+            if mode == 'switch-ready' and (requests.count('/beta/SecurityLabSetup.exe') != 1 or requests.count('/stable/SecurityLabSetup.exe') != 1):
+                raise SystemExit('Switching after download did not replace the stale payload')
+            if mode in ['stable-older','same-version','selected-channel-down'] and any(path.endswith('.exe') for path in requests):
+                raise SystemExit('A stale, equal or unavailable channel triggered a download')
+            if mode in ['stable-older','selected-channel-down'] and '/beta/update.json' in requests:
+                raise SystemExit('Selected stable unexpectedly fell back to beta')
             row = json.loads(lines[-1]); row['requests'] = requests; rows.append(row)
     destination = Path(args.results); destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps({'passed': True, 'cases': rows, 'skipped': skipped}, indent=2, ensure_ascii=False), encoding='utf-8')

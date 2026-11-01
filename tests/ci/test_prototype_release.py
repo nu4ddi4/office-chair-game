@@ -71,9 +71,11 @@ class PrototypeReleaseTests(unittest.TestCase):
     def test_version_allocation_and_retry_identity(self):
         from release_version import next_version, identity
         existing = [{'tag_name': 'SecurityLab-0.8.0-beta.1'}, {'tag_name':'SecurityLab-0.8.0'}]
-        self.assertEqual(next_version('0.8.0', 'beta', existing), '0.8.0-beta.2')
+        self.assertEqual(next_version('0.8.0', 'beta', existing), '0.8.1-beta.1')
         self.assertEqual(next_version('0.8.0', 'main', existing), '0.8.1')
         self.assertEqual(next_version('0.9.0', 'main', existing), '0.9.0')
+        self.assertEqual(next_version('0.8.0', 'beta', [{'tag_name':'SecurityLab-0.8.9'}, {'tag_name':'SecurityLab-0.8.10-beta.2'}]), '0.8.10-beta.3')
+        self.assertEqual(next_version('0.8.0', 'beta', [{'tag_name':'SecurityLab-0.8.999'}]), '0.9.0-beta.1')
         self.assertEqual(identity('0.8.0', self.sha)['channel'], 'stable')
 
     def test_main_and_beta_keep_the_same_public_signing_identity(self):

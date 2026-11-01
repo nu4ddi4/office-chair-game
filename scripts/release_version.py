@@ -52,6 +52,16 @@ def next_version(base, branch, releases):
             except ValueError:
                 continue
     if branch == 'beta':
+        stable = [v[:3] for v in versions if not v[3]]
+        if stable and (major, minor, patch) <= max(stable):
+            major, minor, patch = max(stable)
+            patch += 1
+            if patch > 999: minor, patch = minor + 1, 0
+            if minor > 999: major, minor = major + 1, 0
+        beta_targets = [v[:3] for v in versions if v[3]]
+        if beta_targets and (major, minor, patch) < max(beta_targets):
+            major, minor, patch = max(beta_targets)
+        base = '.'.join(map(str, (major, minor, patch)))
         sequence = max((v[3] for v in versions if v[:3] == (major, minor, patch) and v[3]), default=0) + 1
         if sequence > 998:
             raise ValueError('Beta sequence exhausted; raise the target version')

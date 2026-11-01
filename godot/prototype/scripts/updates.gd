@@ -9,7 +9,8 @@ var platform = OS.get_name()
 var status = ""
 var download_url = ""
 var busy = false
-var preview = false
+var selected_channel = "stable"
+var request_epoch = 0
 var request: HTTPRequest
 
 static func version_parts(value: String) -> Array:
@@ -18,16 +19,18 @@ static func version_parts(value: String) -> Array:
 static func newer(a: String, b: String) -> bool:
 	return NativeUpdatePolicy.newer(a,b)
 
-# Stable releases are always candidates; prereleases only while the beta preview is on.
-static func select_release(releases: Array, metadata: Dictionary, target: String, preview = false) -> Dictionary:
+# Only newer releases from the selected channel are candidates.
+static func select_release(releases: Array, metadata: Dictionary, target: String, channel = "stable") -> Dictionary:
+	if channel not in ["stable","beta"]: return {}
 	var best = {}
 	var prefix = metadata.get("tag_prefix","SecurityLab-")
 	for release in releases:
 		if not release is Dictionary or release.get("draft",true) != false: continue
-		if release.get("prerelease") != false and not preview: continue
+		if release.get("prerelease") != (channel=="beta"): continue
 		var tag = release.get("tag_name","")
 		if not tag is String or not tag.begins_with(prefix): continue
 		var version = tag.trim_prefix(prefix)
+		if not NativeUpdatePolicy.valid_version(version,channel): continue
 		if not newer(version,metadata.get("version","")): continue
 		if not best.is_empty() and not newer(version,best.version): continue
 		best = {"version":version,"url":""}
@@ -48,20 +51,25 @@ func _ready():
 	var metadata = JSON.parse_string(FileAccess.get_file_as_string("res://prototype/version.json"))
 	if metadata is Dictionary: installed = metadata
 	status = "현재 %s · %s 채널" % [installed.get("version","개발"),"사전 릴리즈" if installed.get("prerelease",true) else "안정"]
+
+func cancel_check():
+	request_epoch += 1
+	if is_instance_valid(request): request.cancel_request(); request.queue_free()
+	busy = false
+	download_url = ""
+
+func check(channel = "stable"):
+	cancel_check()
+	selected_channel = channel
+	busy = true
+	status = "선택한 채널의 업데이트 확인 중…"
+	changed.emit()
 	request = HTTPRequest.new()
 	request.timeout = 12
 	request.body_size_limit = 1024*1024
 	request.max_redirects = 0
 	add_child(request)
-	request.request_completed.connect(_completed)
-
-func check(beta_preview = false):
-	if busy: return
-	busy = true
-	preview = beta_preview
-	download_url = ""
-	status = "업데이트 확인 중…"
-	changed.emit()
+	request.request_completed.connect(_completed.bind(request_epoch))
 	var result = request.request(API,PackedStringArray(["Accept: application/vnd.github+json","User-Agent: SecurityLab-update-check"]))
 	if result != OK: _failed()
 
@@ -70,13 +78,14 @@ func _failed():
 	status = "업데이트를 확인하지 못했습니다. 연결 후 다시 확인하세요."
 	changed.emit()
 
-func _completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray):
+func _completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray, generation = -1):
+	if generation != -1 and generation != request_epoch: return
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200: _failed(); return
 	var releases = JSON.parse_string(body.get_string_from_utf8())
 	if not releases is Array: _failed(); return
 	busy = false
-	var candidate = select_release(releases,installed,platform,preview)
-	if candidate.is_empty(): status = "현재 채널의 최신 버전입니다."
+	var candidate = select_release(releases,installed,platform,selected_channel)
+	if candidate.is_empty(): status = "%s 채널에 현재 버전보다 새 버전이 없습니다. (%s 유지)" % ["베타" if selected_channel=="beta" else "정식",installed.get("version","")]
 	elif candidate.url == "": status = "새 버전 %s · 이 플랫폼의 배포 파일이 아직 없습니다." % candidate.version
 	else:
 		download_url = candidate.url
