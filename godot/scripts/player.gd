@@ -4,8 +4,6 @@ extends CharacterBody3D
 signal inspect_requested(target: Node)
 signal tool_requested(target: Node)
 signal pause_requested
-var third_person = false
-var camera_arm: SpringArm3D
 var camera: Camera3D
 var ray: RayCast3D
 var shape: CollisionShape3D
@@ -44,6 +42,12 @@ func _notification(what):
 func restore_mouse_mode(mode):
 	Input.mouse_mode = mode if application_focused and not capture_suspended and not touch_controls_enabled and not OS.has_feature("mobile") else Input.MOUSE_MODE_VISIBLE
 
+func _input(event):
+	# Captured look belongs to the player, before any HUD Control can consume it.
+	if event is InputEventMouseMotion and enabled and not input_blocked() and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		look(event.relative)
+		get_viewport().set_input_as_handled()
+
 func _unhandled_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and enabled and application_focused and capture_suspended and not settings_input_blocked:
 		capture_suspended = false
@@ -55,7 +59,7 @@ func _unhandled_input(event):
 		pause_requested.emit()
 		get_viewport().set_input_as_handled()
 	if not enabled: return
-	if event is InputEventMouseMotion and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)):
+	if event is InputEventMouseMotion and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		look(event.relative)
 	if not unified_interaction and event.is_action_pressed("inspect") and target != null: inspect_requested.emit(target)
 	if event.is_action_pressed("tool") and target != null: interact()
@@ -101,8 +105,7 @@ func set_enabled(value: bool):
 func look(relative: Vector2):
 	if not enabled or input_blocked(): return
 	rotate_y(-relative.x * sensitivity)
-	if third_person: camera_arm.rotation.x = clampf(camera_arm.rotation.x-relative.y*sensitivity,-.8,.55)
-	else: camera.rotation.x = clampf(camera.rotation.x - relative.y * sensitivity, -1.42, 1.42)
+	camera.rotation.x = clampf(camera.rotation.x - relative.y * sensitivity, -1.42, 1.42)
 
 func interact():
 	if not enabled or input_blocked() or target == null: return
@@ -156,7 +159,7 @@ func _physics_process(delta):
 	body_height = 1.1 if crouched else 1.8
 	shape.shape.height = body_height
 	shape.position.y = body_height / 2.0
-	if not third_person: camera.position.y = lerpf(camera.position.y, 0.95 if crouched else 1.65, 1.0 - exp(-delta * 18.0))
+	camera.position.y = lerpf(camera.position.y, 0.95 if crouched else 1.65, 1.0 - exp(-delta * 18.0))
 	var axes = (Input.get_vector("left", "right", "forward", "back") + touch_axes).limit_length()
 	var direction = global_basis * Vector3(axes.x, 0, axes.y)
 	var speed = 1.35 if crouched else 4.2 if Input.is_action_pressed("sprint") else 2.6
@@ -180,15 +183,3 @@ func respawn():
 func input_blocked() -> bool:
 	release_keys = release_keys.filter(func(key): return Input.is_physical_key_pressed(key))
 	return settings_input_blocked or not release_keys.is_empty() or not application_focused or capture_suspended
-
-func enable_third_person():
-	third_person = true
-	camera_arm = SpringArm3D.new()
-	camera_arm.position = Vector3(.55,1.7,0)
-	camera_arm.spring_length = 3.2
-	camera_arm.collision_mask = 1
-	camera_arm.add_excluded_object(get_rid())
-	add_child(camera_arm)
-	camera.reparent(camera_arm)
-	camera.transform = Transform3D.IDENTITY
-	interaction_reach = 6.2

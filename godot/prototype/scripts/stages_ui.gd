@@ -15,6 +15,8 @@ var effects: Node3D
 var shock: Tween
 var flights: Array[Tween] = []
 var current_attempt = ""
+var stage_choices: VBoxContainer
+var stage_scroll: ScrollContainer
 
 func setup(controller: InvestigationPrototype):
 	game = controller
@@ -25,20 +27,34 @@ func setup(controller: InvestigationPrototype):
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	get_viewport().gui_embed_subwindows = true
 	modal = panel(0,0,1,1)
-	field_objective = panel(0,0,.3,.2)
-	hud = label(field_objective,"")
-	guide = Label.new()
-	field_objective.add_child(guide)
+	field_objective = PanelContainer.new()
+	field_objective.theme_type_variation = "HudPanel"
+	root.add_child(field_objective)
+	var info = VBoxContainer.new()
+	info.add_theme_constant_override("separation",6)
+	field_objective.add_child(info)
+	hud = label(info,"","SectionLabel")
+	guide = label(info,"")
+	guide.add_theme_font_size_override("font_size",16)
 	prompt_panel = PanelContainer.new()
+	prompt_panel.theme_type_variation = "KeyCapPanel"
 	root.add_child(prompt_panel)
 	prompt = label(prompt_panel,"")
+	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt_panel.hide()
 	dot = Crosshair.new()
+	dot.size = Vector2(28,28)
 	root.add_child(dot)
 	dot.hide()
-	toast = panel(.05,.03,.95,.2)
+	toast = PanelContainer.new()
+	toast.theme_type_variation = "HudPanel"
+	root.add_child(toast)
+	toast.hide()
 	message = label(toast,"")
-	update_hud = panel(.03,.85,.5,.95)
+	update_hud = PanelContainer.new()
+	update_hud.theme_type_variation = "HudPanel"
+	root.add_child(update_hud)
+	update_hud.hide()
 	var updates_box = VBoxContainer.new()
 	update_hud.add_child(updates_box)
 	update_hud_label = label(updates_box,"")
@@ -77,6 +93,7 @@ func setup(controller: InvestigationPrototype):
 	flash.color = Color(1,.5,.1,0)
 	root.add_child(flash)
 	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for overlay in [field_objective,prompt_panel,toast,update_hud,dot]: ignore_pointer(overlay)
 	fit_screen()
 	refresh()
 	entry.show_menu(false)
@@ -114,7 +131,9 @@ func refresh():
 	source.text = "PC-%02d / OFFICE OS" % game.state.stage.index
 	terminal_objective.text = task.title+"\n\n"+task.text
 	terminal_compact_objective.text = task.title+"\n"+task.text
-	guide.text = task.title+"\n"+task.text+"\nWASD 이동 · 마우스 시점 · F 상호작용 · Space 점프"
+	hud.text = task.title
+	guide.text = task.text
+	fit_field_overlays.call_deferred()
 	refresh_settings()
 
 func refresh_input_hints(): refresh()
@@ -359,15 +378,14 @@ func clear_effects():
 	if is_instance_valid(effects): effects.queue_free()
 	if shock != null: shock.kill()
 	if flash != null: flash.color.a = 0
-	if game.player.third_person:
-		if game.player.camera.get_parent() != game.player.camera_arm: game.player.camera.reparent(game.player.camera_arm,false)
-		game.player.camera.transform = Transform3D.IDENTITY
+	game.stage_world.restore_view()
 	game.player.camera.h_offset = 0
 	game.player.camera.v_offset = 0
 
 func fit_screen():
 	if root == null or terminal_sidebar == null: return
 	var safe = game.safe_rect()
+	fit_field_overlays()
 	var compact = safe.size.x < 1000
 	result_panel.anchor_left = .04 if compact else .12
 	result_panel.anchor_right = .96 if compact else .88
@@ -403,15 +421,62 @@ func talk_to(id: String):
 		notice("지금은 내 담당이 아닌데? 담당자를 찾아봐.")
 		return
 	clear(modal)
+	stage_scroll = ScrollContainer.new()
+	stage_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	modal.add_child(stage_scroll)
 	var box = VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation",18)
-	modal.add_child(box)
+	stage_scroll.add_child(box)
 	heading(box,game.content.case.npcs[id].name)
 	label(box,definition.dialogue)
+	stage_choices = VBoxContainer.new()
+	stage_choices.add_theme_constant_override("separation",10)
+	box.add_child(stage_choices)
 	for i in range(definition.choices.size()):
 		var choice = i
-		button(box,definition.choices[i],func():
+		var option = button(stage_choices,definition.choices[i],func():
 			var result = game.dispatch({"type":"stage.talk","payload":{"choice":choice}})
 			command_result(result))
+		option.custom_minimum_size.y = 48
+		option.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button(box,"잠깐만, 다시 생각할게요",enter_field)
 	_show("stage_dialogue",modal)
+
+func ignore_pointer(node: Node):
+	if node is Control: node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children(): ignore_pointer(child)
+
+func fit_field_overlays():
+	var safe = game.safe_rect()
+	var width = minf(480,safe.size.x-32)
+	field_objective.position = safe.position+Vector2(16,16)
+	field_objective.custom_minimum_size.x = width
+	guide.custom_minimum_size.x = width-36
+	hud.custom_minimum_size.x = width-36
+	field_objective.size = Vector2(width,0)
+	var notice_width = minf(440,safe.size.x-32)
+	toast.custom_minimum_size.x = notice_width
+	message.custom_minimum_size.x = notice_width-36
+	toast.size = Vector2(notice_width,0)
+	toast.position = safe.position+Vector2(16,field_objective.get_combined_minimum_size().y+28)
+	update_hud.position = Vector2(safe.position.x+16,safe.end.y-80-(160 if game.controls.touch_enabled else 0))
+	update_hud_label.custom_minimum_size.x = minf(300,safe.size.x-68)
+	place_prompt()
+
+func place_prompt():
+	var safe = game.safe_rect()
+	var longest = 0.0
+	var font = prompt.get_theme_font("font")
+	for line in prompt.text.split("\n"):
+		longest = maxf(longest,font.get_string_size(line,HORIZONTAL_ALIGNMENT_LEFT,-1,prompt.get_theme_font_size("font_size")).x)
+	var width = clampf(longest+36,220,safe.size.x-32)
+	prompt.custom_minimum_size.x = width-36
+	prompt_panel.custom_minimum_size.x = width
+	prompt_panel.size = Vector2(width,0)
+	prompt_panel.reset_size()
+	prompt_panel.position = Vector2(safe.position.x+(safe.size.x-prompt_panel.size.x)/2,safe.end.y-prompt_panel.size.y-(192 if game.controls.touch_enabled else 28))
+
+func notice(text: String):
+	super.notice(text)
+	fit_field_overlays.call_deferred()
