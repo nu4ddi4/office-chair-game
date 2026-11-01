@@ -9,6 +9,12 @@ def installer_manifest(manifest):
             if key not in {'compat', 'content_url', 'content_size', 'content_sha256'}}
 
 
+def portable_asset_name(name):
+    if name.startswith('SecurityLab-') and name.endswith('.exe') and not name.endswith('-Portable.exe'):
+        return name[:-4] + '-Portable.exe'
+    return name
+
+
 def github(path, missing_ok=False):
     result = subprocess.run(['gh', 'api', path], capture_output=True, text=True, encoding='utf-8')
     if result.returncode:
