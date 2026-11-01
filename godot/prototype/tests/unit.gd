@@ -42,6 +42,16 @@ func _initialize():
 	check(InvestigationUpdates.newer("0.8.0","0.8.0-beta.2"),"Stable version follows all beta sequences")
 	check(not InvestigationUpdates.newer("0.2.0-beta.1","0.2.0"),"A beta never replaces the same stable version")
 	check(InvestigationUpdates.select_release(candidates,installed,"Linux").url == "","Unavailable platform files are never replaced with Windows assets")
+	var portable = release_fixture("0.11.0",false)
+	var portable_asset = portable.assets[1].duplicate()
+	portable_asset.name = portable_asset.name.trim_suffix(".exe")+"-Portable.exe"
+	portable_asset.browser_download_url = portable_asset.browser_download_url.trim_suffix(".exe")+"-Portable.exe"
+	portable.assets.append(portable_asset)
+	check(InvestigationUpdates.select_release([portable],installed,"Windows").url == portable_asset.browser_download_url,"Windows prefers explicitly named portable downloads over old names")
+	portable.assets.remove_at(1)
+	check(InvestigationUpdates.select_release([portable],installed,"Windows").url == portable_asset.browser_download_url,"Portable-only releases remain discoverable")
+	portable.assets[1].browser_download_url = "https://example.com/Portable.exe"
+	check(InvestigationUpdates.select_release([portable],installed,"Windows").url == "","Portable downloads keep the exact trusted repository URL check")
 	var content = InvestigationContent.load_case()
 	check(not content.has("error"),"Content loads")
 	if content.has("error"): quit(1); return
