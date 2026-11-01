@@ -3,6 +3,7 @@ import re
 import subprocess
 
 from release_version import tag
+from github_release import portable_asset_name
 
 
 def unchanged_game(source_sha):
@@ -26,7 +27,7 @@ def select_backfill(releases, base, branch, pipeline_sha):
         assets = release.get('assets', [])
         names = {asset['name'] for asset in assets if asset.get('state') == 'uploaded' and asset.get('size', 0) > 0}
         owned_retry = any(asset.get('label') == 'Codex pipeline ' + pipeline_sha for asset in assets)
-        if tag(base) + '.exe' in names and (tag(base) + '.apk' not in names or owned_retry):
+        if ({tag(base) + '.exe', portable_asset_name(tag(base) + '.exe')} & names) and (tag(base) + '.apk' not in names or owned_retry):
             if unchanged_game(release.get('target_commitish')):
                 return release
     return None
