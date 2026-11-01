@@ -97,12 +97,12 @@ static func valid_progress(a) -> bool:
 	for key in a:
 		if key not in ["version","index","unlocked","phase","cleared","mistakes","blasts","attempt","entered"]: return false
 	if not InvestigationSaveCodec.whole(a.get("index"),1,COUNT) or not InvestigationSaveCodec.whole(a.get("unlocked"),1,COUNT) or a.index > a.unlocked: return false
+	if not a.get("cleared") is Array or a.cleared.size() > COUNT: return false
 	if a.has("entered") and (not InvestigationSaveCodec.whole(a.entered,1,COUNT) or a.entered < maxi(int(a.index),a.cleared.size()) or a.entered > a.unlocked): return false
 	if a.get("phase") not in PHASES: return false
 	for key in ["mistakes","blasts"]:
 		if not InvestigationSaveCodec.whole(a.get(key),0,1000000): return false
 	if a.blasts > a.mistakes or not InvestigationSaveCodec.whole(a.get("attempt"),1,1000000): return false
-	if not a.get("cleared") is Array or a.cleared.size() > COUNT: return false
 	for i in range(a.cleared.size()):
 		if a.cleared[i] != i+1: return false
 	if a.unlocked != mini(COUNT,a.cleared.size()+1): return false

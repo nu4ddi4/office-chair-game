@@ -104,11 +104,13 @@ func build_settings_references():
 	hidden.hide()
 	touch_setting = CheckButton.new()
 	update_setting = CheckButton.new()
-	preview_setting = CheckButton.new()
-	for node in [touch_setting,update_setting,preview_setting]: hidden.add_child(node)
+	channel_setting = OptionButton.new()
+	for node in [touch_setting,update_setting,channel_setting]: hidden.add_child(node)
 	touch_setting.toggled.connect(game.controls.set_touch)
 	update_setting.toggled.connect(game.controls.set_automatic_updates)
-	preview_setting.toggled.connect(game.controls.set_beta_preview)
+	channel_setting.add_item("정식",0)
+	channel_setting.add_item("베타",1)
+	channel_setting.item_selected.connect(func(index): game.controls.set_update_channel("beta" if index == 1 else "stable"))
 	input_status = label(hidden,"")
 	update_status = label(hidden,"")
 	update_bar = ProgressBar.new()
@@ -140,14 +142,13 @@ func refresh_input_hints(): refresh()
 
 func _unhandled_key_input(event: InputEvent):
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
-		if mode == "terminal": open_pause()
-		else: toggle()
+		toggle()
 		get_viewport().set_input_as_handled()
 
 func _terminal_input(event: InputEvent):
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		command_input.accept_event()
-		open_pause()
+		close()
 	elif event is InputEventKey and event.pressed and event.keycode in [KEY_ENTER,KEY_KP_ENTER]:
 		command_input.accept_event()
 		if not event.echo: execute_command()
@@ -214,6 +215,7 @@ func close():
 	if mode == "main_menu": return
 	if mode == "pause": resume_session(); return
 	if mode == "intro": entry.show_menu(false); return
+	if mode in ["result","exploded"]: open_pause(); return
 	enter_field()
 
 func enter_field():
@@ -235,8 +237,7 @@ func open_stage_picker():
 	for i in range(TerminalStagesEngine.COUNT):
 		var chosen = i+1
 		var b = button(picks,"%02d   %s" % [chosen,game.content.stages[i].title if chosen <= game.state.stage.get("entered",maxi(int(game.state.stage.index),game.state.stage.cleared.size())) else "???"],func():
-			game.dispatch({"type":"stage.select","payload":{"index":chosen}})
-			game.save_now()
+			if not game.commit_stage_transition({"type":"stage.select","payload":{"index":chosen}}): return
 			game.stage_world.key = ""
 			current_attempt = ""
 			begin_stage())
@@ -266,7 +267,7 @@ func execute_command():
 	command_history[game.context] = history
 	history_index = history.size()
 	match command.to_lower():
-		"exit","logout": open_pause()
+		"exit","logout": close()
 		"clear","cls": clear_terminal()
 		"history": print_output(command,"\n".join(history))
 		_: game.command(command)
@@ -307,13 +308,11 @@ func show_result():
 	(result_retry if failed else result_next if phase == "clear" else result_menu).grab_focus()
 
 func retry_stage():
-	game.dispatch({"type":"stage.retry"})
-	game.save_now()
+	if not game.commit_stage_transition({"type":"stage.retry"}): return
 	begin_stage()
 
 func next_stage():
-	game.dispatch({"type":"stage.next"})
-	game.save_now()
+	if not game.commit_stage_transition({"type":"stage.next"}): return
 	if game.state.stage.phase == "complete": show_result()
 	else: begin_stage()
 
