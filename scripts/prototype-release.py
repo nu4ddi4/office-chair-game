@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 
-from github_release import github, installer_manifest
+from github_release import github, installer_manifest, portable_asset_name
 from release_version import PRODUCT, REPOSITORY, channel, parts, tag
 from release_backfill import unchanged_game
 
@@ -62,7 +62,9 @@ def published_manifest(release, repository, version, sha, directory):
             raise ValueError('Invalid published checksums')
         sums[match[2]] = match[1]
     assets = {asset['name']: asset for asset in release['assets']}
-    for name in ['SecurityLabSetup.exe', tag(version) + '.exe']:
+    portable = portable_asset_name(tag(version) + '.exe')
+    if portable not in assets: portable = tag(version) + '.exe'
+    for name in ['SecurityLabSetup.exe', portable]:
         asset = assets.get(name, {})
         if (name not in sums or asset.get('state') != 'uploaded' or asset.get('size', 0) <= 0
                 or asset.get('digest') not in {None, 'sha256:' + sums[name]}):
@@ -71,7 +73,7 @@ def published_manifest(release, repository, version, sha, directory):
             'channel': channel(version), 'version': version, 'commit': sha,
             'installer_url': 'https://github.com/' + repository + '/releases/download/' + tag(version) + '/SecurityLabSetup.exe',
             'size': assets['SecurityLabSetup.exe']['size'], 'sha256': sums['SecurityLabSetup.exe'],
-            'exe_sha256': sums[tag(version) + '.exe']}
+            'exe_sha256': sums[portable]}
 
 
 def publish_channel(repository, sha, manifest_file):
@@ -205,7 +207,7 @@ def main():
             original = verified_file(download, release_tag + ('.apk' if platform == 'Android' else '.exe'))
             if platform == 'Android':
                 verify_android(download, version, sha, sha)
-            destination = directory / original.name
+            destination = directory / (portable_asset_name(original.name) if platform == 'Windows-x64' else original.name)
             shutil.copyfile(original, destination)
             files.append(destination)
         windows = directory / 'Windows-x64'
