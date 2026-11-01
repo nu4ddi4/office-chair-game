@@ -248,7 +248,7 @@ class PrototypeReleaseTests(unittest.TestCase):
                     patch.object(release.subprocess, 'check_output', return_value=self.sha), patch.object(release, 'publish_channel') as publish:
                 publish.side_effect = lambda repo, sha, path: self.assertEqual(json.loads(path.read_text()), release.installer_manifest(manifest))
                 release.main()
-            self.assertEqual(set(uploads), {release.tag(self.version) + '.exe', release.tag(self.version) + '.apk', 'SecurityLabSetup.exe', 'SHA256SUMS.txt'})
+            self.assertEqual(set(uploads), {release.tag(self.version) + '-Portable.exe', release.tag(self.version) + '.apk', 'SecurityLabSetup.exe', 'SHA256SUMS.txt'})
             self.assertEqual({line.split('  ')[1] for line in uploads['SHA256SUMS.txt'].decode().splitlines()}, set(uploads) - {'SHA256SUMS.txt'})
 
     def test_channel_cleanup_preserves_same_version_payload_and_rejects_replacement(self):
@@ -310,6 +310,38 @@ class PrototypeReleaseTests(unittest.TestCase):
         item = {'name': 'game.exe', 'id': 42, 'size': 2048, 'digest': 'sha256:' + 'b'*64, 'state': 'uploaded', 'download_count': 0}
         self.assertEqual(assets.asset_identities([item]), assets.asset_identities([dict(item, download_count=100)]))
         self.assertNotEqual(assets.asset_identities([item]), assets.asset_identities([dict(item, size=4096)]))
+
+    def test_portable_rename_preserves_payload_and_resumes_checksum_update(self):
+        import tempfile
+        old, new = 'SecurityLab-0.10.3.exe', 'SecurityLab-0.10.3-Portable.exe'
+        self.assertEqual(release.portable_asset_name(old), new)
+        self.assertEqual(release.portable_asset_name(new), new)
+        self.assertEqual(release.portable_asset_name('SecurityLabSetup.exe'), 'SecurityLabSetup.exe')
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            binary = {'id': 42, 'name': old, 'size': 2048, 'digest': 'sha256:' + 'b'*64, 'state': 'uploaded'}
+            published = {'id': 1, 'tag_name': 'SecurityLab-0.10.3', 'draft': False,
+                         'assets': [binary, {'name': 'SHA256SUMS.txt'}]}
+            for name_in_checksum in [old, new]:
+                (directory/'SHA256SUMS.txt').write_text('b'*64 + '  ' + name_in_checksum + '\n')
+                plan = assets.cleanup_plan(published, directory)
+                self.assertEqual(plan['rename'], [{'id': 42, 'name': new}])
+                self.assertEqual(plan['binaries'], [dict(binary, name=new)])
+                self.assertEqual(plan['remove'], [])
+                self.assertEqual(plan['checksums'], 'b'*64 + '  ' + new + '\n')
+
+    def test_update_recovery_accepts_portable_release_names(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            names = ['SecurityLabSetup.exe', release.tag(self.version) + '-Portable.exe']
+            published = {'assets': [{'name': name, 'state': 'uploaded', 'size': 2048, 'digest': 'sha256:' + 'b'*64} for name in names]}
+            (directory/'SHA256SUMS.txt').write_text(''.join('b'*64 + '  ' + name + '\n' for name in names))
+            with patch.object(release.subprocess, 'run'):
+                manifest = release.published_manifest(published, self.repo, self.version, self.sha, directory)
+            self.assertEqual(manifest['exe_sha256'], 'b'*64)
+            self.assertTrue(manifest['installer_url'].endswith('/SecurityLabSetup.exe'))
 
     def test_beta_channel_version_order(self):
         self.assertLess(release.version_key('0.3.0-beta.1'), release.version_key('0.3.1-beta.1'))

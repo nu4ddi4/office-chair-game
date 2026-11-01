@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from github_release import github, installer_manifest
+from github_release import github, installer_manifest, portable_asset_name
 from release_version import REPOSITORY
 
 PREFIX = 'repos/' + REPOSITORY
@@ -41,16 +41,23 @@ def cleanup_plan(release, directory):
                     raise ValueError('Invalid or conflicting checksum: ' + name)
                 hashes[match[2]] = match[1].lower()
     for asset in binaries:
-        digest = hashes.get(asset['name'])
+        digest = hashes.get(asset['name']) or hashes.get(portable_asset_name(asset['name']))
+        if digest: hashes[asset['name']] = digest
         if not digest or asset.get('digest') not in (None, 'sha256:' + digest):
             raise ValueError('Missing or mismatched binary checksum: ' + asset['name'])
     keep = {a['name'] for a in binaries + sums}
     remove = [a for a in assets if a['name'] not in keep]
-    if not remove:
+    renamed = [dict(a, name=portable_asset_name(a['name'])) for a in binaries]
+    rename = [{'id': old['id'], 'name': new['name']} for old, new in zip(binaries, renamed) if old['name'] != new['name']]
+    existing = {a['name'] for a in assets}
+    if any(a['name'] in existing for a in rename):
+        raise ValueError('Portable asset name already exists: ' + release['tag_name'])
+    if not remove and not rename:
         return None
+    keep = {a['name'] for a in renamed + sums}
     return {'tag': release['tag_name'], 'id': release['id'], 'keep': sorted(keep),
-            'binaries': binaries, 'remove': remove, 'checksum': sums[0]['name'],
-            'checksums': ''.join(hashes[a['name']] + '  ' + a['name'] + '\n' for a in binaries)}
+            'binaries': renamed, 'rename': rename, 'remove': remove, 'checksum': sums[0]['name'],
+            'checksums': ''.join(hashes[old['name']] + '  ' + new['name'] + '\n' for old, new in zip(binaries, renamed))}
 
 
 def download_backup(release, output):
@@ -114,7 +121,7 @@ def main():
         directories = list(pool.map(lambda r: download_backup(r, args.output), selected + channels))
     plans = [p for r, directory in zip(selected, directories) if (p := cleanup_plan(r, directory))]
     (args.output/'plan.json').write_text(json.dumps(plans, indent=2), encoding='utf-8')
-    print(json.dumps({'releases': len(plans), 'remove': sum(len(p['remove']) for p in plans), 'apply': args.apply}), flush=True)
+    print(json.dumps({'releases': len(plans), 'remove': sum(len(p['remove']) for p in plans), 'rename': sum(len(p['rename']) for p in plans), 'apply': args.apply}), flush=True)
     if not args.apply:
         return
     for release in channels:
@@ -128,6 +135,8 @@ def main():
         checksum.parent.mkdir(exist_ok=True)
         checksum.write_text(plan['checksums'], encoding='utf-8')
         subprocess.run(['gh', 'release', 'upload', plan['tag'], str(checksum), '--repo', REPOSITORY, '--clobber'], check=True)
+        for asset in plan['rename']:
+            subprocess.run(['gh', 'api', '--method', 'PATCH', PREFIX + '/releases/assets/' + str(asset['id']), '-f', 'name=' + asset['name']], check=True, stdout=subprocess.DEVNULL)
         for asset in plan['remove']:
             subprocess.run(['gh', 'api', '--method', 'DELETE', PREFIX + '/releases/assets/' + str(asset['id'])], check=True)
         after = github(PREFIX + '/releases/' + str(plan['id']))

@@ -24,3 +24,5 @@ python scripts/prototype-test.py --godot /path/to/Godot-4.7.2 --suite rules
 - [스테이지·현재 구조](docs/TERMINAL_STAGES.md) · [이전 조사 모드](docs/INVESTIGATION_PROTOTYPE.md)
 - [개발 규칙](AGENTS.md) · [검사·빌드](docs/CI.md) · [버전 규칙](docs/VERSIONING.md)
 - [조작키](docs/INPUT_REBINDING.md) · [로컬 진단](docs/NATIVE_DIAGNOSTICS.md) · [업데이트](docs/NATIVE_AUTO_UPDATE.md)
+
+릴리즈의 `SecurityLabSetup.exe`는 설치형, `SecurityLab-<버전>-Portable.exe`는 설치 없이 실행하는 포터블입니다.
