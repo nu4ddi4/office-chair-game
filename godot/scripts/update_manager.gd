@@ -11,6 +11,7 @@ var bundled: Dictionary = {}
 var manifest: Dictionary = {}
 var kind = "installer"
 var candidate_sources: Array = []
+var candidate_source = ""
 var enabled = false
 var local_test = false
 var source = ""
@@ -19,6 +20,7 @@ var sources: Array = []
 var source_index = 0
 var candidates: Array = []
 var verified_sources = 0
+var checked_version = ""
 var check_error = ""
 var progress = -1.0
 var state = "disabled"
@@ -31,6 +33,7 @@ var consent_dialog: ConfirmationDialog
 var consent_player_enabled = false
 var helper_pid = -1
 var preparing_dialog: AcceptDialog
+var request_epoch = 0
 var settings_path = Policy.preference_path("dev")
 
 func executable_path() -> String:
@@ -48,6 +51,46 @@ func valid_saved_progress() -> bool: return false
 func pause_for_install(): pass
 func content_directory() -> String: return "user://content"
 func beta_preview() -> bool: return info.get("channel") == "beta"
+func selected_channel() -> String:
+	if info.get("channel") == "dev": return "dev"
+	return "beta" if beta_preview() else "stable"
+
+func candidate_current() -> bool:
+	return manifest.get("channel") == selected_channel() and manifest.get("version") is String and info.get("version") is String and Policy.newer(manifest.version,info.version)
+
+func renew_http():
+	if is_instance_valid(http):
+		http.cancel_request()
+		http.queue_free()
+	http = HTTPRequest.new()
+	http.use_threads = true
+	http.accept_gzip = false
+	http.max_redirects = 0
+	http.timeout = 30
+	http.request_completed.connect(response.bind(request_epoch))
+	add_child(http)
+
+func cancel_pending() -> bool:
+	if state == "preparing": return false
+	request_epoch += 1
+	if is_instance_valid(http): http.cancel_request()
+	consent_granted = false
+	close_consent()
+	if state in ["downloading","ready"] and not stage.is_empty():
+		var partial = download_path()
+		if FileAccess.file_exists(partial): DirAccess.remove_absolute(partial)
+	manifest = {}
+	candidates.clear()
+	candidate_sources.clear()
+	state = "idle" if enabled else "disabled"
+	set_progress(-1.0)
+	return true
+
+func channel_changed():
+	if not cancel_pending(): return
+	status_changed.emit("업데이트 채널을 변경했습니다.")
+	if enabled: check()
+
 
 func setup(host: Node):
 	game = host
@@ -69,13 +112,7 @@ func setup(host: Node):
 	if not enabled: return
 	if not Policy.trusted_manifest(source,info.channel,local_test,info.app_id): fail("업데이트 주소 또는 채널이 올바르지 않습니다."); return
 	if not installed_identity_valid(): fail("자동 업데이트는 Security Lab 설치형 빌드에서 사용할 수 있습니다."); return
-	http = HTTPRequest.new()
-	http.use_threads = true
-	http.accept_gzip = false
-	http.max_redirects = 0
-	http.timeout = 30
-	http.request_completed.connect(response)
-	add_child(http)
+	renew_http()
 	state = "idle"
 	if automatic_check_enabled(): check.call_deferred()
 
@@ -106,31 +143,32 @@ func set_enabled(value: bool):
 
 func build_sources() -> Array:
 	var rows = []
-	for channel in Policy.channels_to_check(info.channel,beta_preview()):
+	for channel in Policy.channels_to_check(info.channel,selected_channel()=="beta"):
 		var url = Policy.manifest_url(channel,info.app_id)
 		if channel==info.channel: url = source
 		elif local_test:
 			if other_source.is_empty(): continue
 			url = other_source
-		rows.append({"channel":channel,"url":url})
+		if Policy.trusted_manifest(url,channel,local_test,info.app_id): rows.append({"channel":channel,"url":url})
 	return rows
 
 func check():
 	# A failed or postponed check must stay repeatable without restarting the game.
 	if not enabled or state not in ["idle","failed","available"] or consent_dialog!=null: return
 	sources = build_sources()
-	if sources.is_empty(): return
-	consent_granted = false
-	manifest = {}; candidates = []; candidate_sources = []; verified_sources = 0; check_error = ""; source_index = 0; kind = "installer"
+	if sources.is_empty(): fail("선택한 채널의 업데이트 주소가 올바르지 않습니다."); return
+	if not cancel_pending(): return
+	renew_http()
+	checked_version = ""; verified_sources = 0; check_error = ""; source_index = 0; kind = "installer"
 	state = "checking"; redirects = 0
-	http.download_file = ""; http.body_size_limit = 16384
+	http.download_file = ""; http.body_size_limit = 16384; http.timeout = 30
 	status_changed.emit("업데이트 확인 중")
 	request(sources[0].url)
 
 func current_url() -> String:
-	return sources[source_index].url if state=="checking" and source_index<sources.size() else source
+	return sources[source_index].url if state=="checking" and source_index<sources.size() else candidate_source if state=="downloading" and not candidate_source.is_empty() else source
 
-# One unreachable or invalid channel never hides a valid update from another one.
+# Fail within the selected channel; never fall back to another channel.
 func reject(message: String):
 	if state!="checking": fail(message); return
 	check_error = message
@@ -141,11 +179,12 @@ func next_source():
 	if source_index<sources.size(): request(sources[source_index].url); return
 	if candidates.is_empty():
 		if verified_sources==0: fail(check_error); return
-		state = "idle"; status_changed.emit("현재 채널의 최신 버전입니다."); return
+		state = "idle"; status_changed.emit("%s 채널 최신 %s · 현재 %s 유지" % ["베타" if selected_channel()=="beta" else "정식" if selected_channel()=="stable" else "개발",checked_version,info.version]); return
 	var best = 0
 	for i in candidates.size():
 		if Policy.newer(candidates[i].version,candidates[best].version): best = i
 	manifest = candidates[best]
+	candidate_source = candidate_sources[best]
 	# A small game-data pack is enough when this executable can run it; otherwise the full installer.
 	kind = "content" if content_applicable(manifest,candidate_sources[best]) else "installer"
 	state = "available"
@@ -153,28 +192,34 @@ func next_source():
 	request_install()
 
 func content_applicable(candidate: Dictionary, endpoint: String) -> bool:
+	if candidate.get("channel") != installed_identity().get("channel"): return false
 	if not Policy.content_valid(candidate,candidate.channel,endpoint,local_test,info.app_id): return false
 	var installed = installed_identity()
 	if not Policy.hex(installed.get("compat"),64) or candidate.compat!=installed.compat: return false
 	return candidate.commit not in ContentBootstrap.rejected(content_directory())
 
-func request(url: String):
+func request(url: String, generation = -1):
+	if generation != -1 and generation != request_epoch: return
+	if not enabled or state not in ["checking","downloading"]: return
 	if http.request(url,["Cache-Control: no-cache","Accept-Encoding: identity"])!=OK: fail("업데이트 연결을 시작하지 못했습니다.")
 
-func response(result: int, code: int, headers: PackedStringArray, body: PackedByteArray):
-	if not enabled: return
+func response(result: int, code: int, headers: PackedStringArray, body: PackedByteArray, generation = -1):
+	if not enabled or (generation != -1 and generation != request_epoch): return
+	if state not in ["checking","downloading"]: return
 	if code in [301,302,303,307,308] and result in [HTTPRequest.RESULT_SUCCESS,HTTPRequest.RESULT_REDIRECT_LIMIT_REACHED]:
 		var location = ""
 		for header in headers:
 			if header.to_lower().begins_with("location:"): location = header.substr(9).strip_edges()
 		if redirects>=3 or not Policy.trusted_redirect(location,current_url(),local_test): reject("허용되지 않은 업데이트 리다이렉트입니다."); return
-		redirects += 1; request.call_deferred(location); return
+		redirects += 1; request.call_deferred(location,request_epoch); return
 	if result!=HTTPRequest.RESULT_SUCCESS or code!=200: reject("업데이트 서버에 연결하지 못했습니다. 게임은 계속 사용할 수 있습니다."); return
 	if state=="checking":
 		var entry = sources[source_index]
+		if entry.channel != selected_channel(): channel_changed(); return
 		var parsed = JSON.parse_string(body.get_string_from_utf8())
 		if not parsed is Dictionary or not Policy.manifest_valid(parsed,entry.channel,entry.url,local_test,info.app_id): reject("업데이트 정보의 형식 또는 채널 검증에 실패했습니다."); return
 		verified_sources += 1
+		checked_version = parsed.version
 		if Policy.newer(parsed.version,info.version):
 			candidates.append(parsed)
 			candidate_sources.append(entry.url)
@@ -188,6 +233,7 @@ func response(result: int, code: int, headers: PackedStringArray, body: PackedBy
 
 func request_install():
 	if not enabled or state not in ["available","ready"] or consent_dialog!=null: return
+	if not candidate_current(): fail("선택한 채널에 현재 버전보다 새로운 업데이트가 없습니다."); return
 	var ui = game.get("ui") if game!=null else null
 	if ui==null: return
 	consent_dialog = ConfirmationDialog.new()
@@ -197,14 +243,16 @@ func request_install():
 	consent_dialog.cancel_button_text = "나중에"
 	consent_dialog.exclusive = true
 	consent_dialog.theme = ui.root.theme
-	consent_dialog.confirmed.connect(confirm_update)
-	consent_dialog.canceled.connect(defer_update)
-	consent_dialog.close_requested.connect(defer_update)
+	consent_dialog.confirmed.connect(confirm_update.bind(request_epoch,manifest.duplicate(true)))
+	consent_dialog.canceled.connect(defer_update.bind(request_epoch))
+	consent_dialog.close_requested.connect(defer_update.bind(request_epoch))
 	update_dialog_parent(ui).add_child(consent_dialog)
 	var player = game.get("player")
 	consent_player_enabled = player!=null and player.enabled
 	if player!=null: player.set_enabled(false)
-	consent_dialog.popup_centered(Vector2i(650,220))
+	consent_dialog.dialog_autowrap = true
+	if ui.has_method("open_dialog"): ui.open_dialog(consent_dialog,650)
+	else: consent_dialog.popup_centered(Vector2i(650,220))
 	consent_dialog.get_cancel_button().grab_focus()
 
 func legacy_settings_panel():
@@ -226,13 +274,16 @@ func close_consent():
 		var blocked = (ui!=null and ui.modal_open) or (panel!=null and panel.visible)
 		player.set_enabled(consent_player_enabled and not blocked)
 
-func defer_update():
+func defer_update(generation = -1):
+	if generation != -1 and generation != request_epoch: return
 	consent_granted = false
 	close_consent()
 	status_changed.emit("업데이트를 미뤘습니다. 설정에서 다시 선택할 수 있습니다.")
 
-func confirm_update():
+func confirm_update(generation = -1, expected: Dictionary = {}):
+	if generation != -1 and (generation != request_epoch or expected != manifest): return
 	if not enabled or state not in ["available","ready"]: return
+	if not candidate_current(): fail("채널 또는 버전이 변경되어 업데이트를 중단했습니다."); return
 	consent_granted = true
 	close_consent()
 	if state=="ready": install.call_deferred(); return
@@ -244,24 +295,27 @@ func confirm_update():
 		http.download_file = stage.path_join("pending.pck")
 		http.body_size_limit = int(manifest.content_size); http.timeout = 180; redirects = 0
 		state = "downloading"; status_changed.emit("동의한 게임 데이터 다운로드 중")
-		request.call_deferred(manifest.content_url)
+		request.call_deferred(manifest.content_url,request_epoch)
 		return
 	stage = ProjectSettings.globalize_path(stage_root().path_join(token))
 	if DirAccess.make_dir_recursive_absolute(stage)!=OK: fail("업데이트 준비 폴더를 만들지 못했습니다."); return
 	http.download_file = stage.path_join("SecurityLabSetup.exe")
 	http.body_size_limit = int(manifest.size); http.timeout = 180; redirects = 0
 	state = "downloading"; status_changed.emit("동의한 업데이트 설치 파일 다운로드 중")
-	request.call_deferred(manifest.installer_url)
+	request.call_deferred(manifest.installer_url,request_epoch)
 
 func download_path() -> String:
 	return stage.path_join("pending.pck" if kind=="content" else "SecurityLabSetup.exe")
 
 func installer_verified() -> bool:
+	var expected_size = manifest.get("content_size" if kind=="content" else "size",0)
+	var expected_hash = manifest.get("content_sha256" if kind=="content" else "sha256","")
+	if not Policy.hex(expected_hash,64) or not (expected_size is int or expected_size is float) or not is_finite(float(expected_size)) or expected_size != int(expected_size) or expected_size <= 0: return false
 	var path = download_path()
 	var file = FileAccess.open(path,FileAccess.READ)
 	if file==null: return false
 	var size = file.get_length(); file.close()
-	return size==int(manifest.content_size if kind=="content" else manifest.size) and FileAccess.get_sha256(path)==(manifest.content_sha256 if kind=="content" else manifest.sha256)
+	return size==int(expected_size) and FileAccess.get_sha256(path)==expected_hash
 
 # Hand-over of the verified pack: the launcher mounts it on the next start.
 func install_content():
@@ -288,6 +342,7 @@ func restart() -> bool:
 
 func install():
 	if state!="ready" or not enabled or not consent_granted: return
+	if not candidate_current(): fail("선택한 채널과 버전을 다시 확인해 주세요."); return
 	if kind=="content": install_content(); return
 	state = "preparing"
 	if not installed_identity_valid() or not installer_verified(): fail("설치 직전 검증에 실패했습니다. 현재 앱을 유지합니다."); return
@@ -302,12 +357,15 @@ func install():
 		preparing_dialog.title = "Security Lab 업데이트"
 		preparing_dialog.dialog_text = "진행을 저장했습니다. 앱 종료와 업데이트 설치를 준비합니다."
 		preparing_dialog.exclusive = true
+		preparing_dialog.borderless = true
 		preparing_dialog.dialog_close_on_escape = false
 		preparing_dialog.theme = ui.root.theme
 		preparing_dialog.get_ok_button().hide()
 		preparing_dialog.get_ok_button().disabled = true
 		update_dialog_parent(ui).add_child(preparing_dialog)
-		preparing_dialog.popup_centered(Vector2i(580,160))
+		preparing_dialog.dialog_autowrap = true
+		if ui.has_method("open_dialog"): ui.open_dialog(preparing_dialog,580)
+		else: preparing_dialog.popup_centered(Vector2i(580,160))
 	var request_data = {"schema":1,"token":token,"parent_pid":OS.get_process_id(),"install_directory":executable_path().get_base_dir(),"data_directory":ProjectSettings.globalize_path(data_directory()),"current":info,"installed":installed_identity(),"target":manifest}
 	for entry in [["transaction.json",JSON.stringify(request_data)], ["SecurityLabUpdater.ps1",FileAccess.get_file_as_string("res://resources/native_update_helper.ps1")]]:
 		var file = FileAccess.open(stage.path_join(entry[0]),FileAccess.WRITE)
@@ -341,6 +399,8 @@ func _process(_delta):
 		set_progress(-1.0)
 
 func fail(message: String):
+	request_epoch += 1
+	if is_instance_valid(http): http.cancel_request()
 	state = "failed"; consent_granted = false
 	close_consent()
 	if preparing_dialog!=null: preparing_dialog.hide(); preparing_dialog.queue_free(); preparing_dialog = null

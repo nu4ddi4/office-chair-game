@@ -8,4 +8,5 @@ func save_progress() -> bool: return game.save_now()
 func data_directory() -> String: return "user://"
 func valid_saved_progress() -> bool: return game.store.load_state(game.content).has("state")
 func pause_for_install(): game.ui.open_tablet(4)
-func beta_preview() -> bool: return game.beta_preview()
+func beta_preview() -> bool: return game.beta_preview() if game.has_method("beta_preview") else super.beta_preview()
+func selected_channel() -> String: return game.update_channel() if game.has_method("update_channel") else super.selected_channel()

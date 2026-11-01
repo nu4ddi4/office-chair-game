@@ -258,13 +258,14 @@ func build_general(page: VBoxContainer):
 	game.ui.update_setting.text = "시작할 때 내 채널의 업데이트 확인"
 	updates.add_child(game.ui.update_setting)
 	game.ui.update_setting.toggled.connect(game.controls.set_automatic_updates)
-	game.ui.preview_setting = CheckButton.new()
-	game.ui.preview_setting.text = "Beta 업데이트 미리보기"
-	updates.add_child(game.ui.preview_setting)
-	game.ui.preview_setting.toggled.connect(func(enabled):
-		game.controls.set_beta_preview(enabled)
-		game.check_updates())
-	text(updates,"정식 릴리스가 아니어도 beta 커밋마다 나오는 빌드를 받습니다. 불안정할 수 있으며 저장은 유지됩니다.",13,InvestigationTheme.TEXT_DIM)
+	text(updates,"업데이트 채널",15)
+	game.ui.channel_setting = OptionButton.new()
+	game.ui.channel_setting.add_item("정식",0)
+	game.ui.channel_setting.add_item("베타",1)
+	game.ui.channel_setting.custom_minimum_size.y = 44
+	updates.add_child(game.ui.channel_setting)
+	game.ui.channel_setting.item_selected.connect(func(index): game.controls.set_update_channel("beta" if index == 1 else "stable"))
+	text(updates,"선택한 채널에서 현재 버전보다 새 버전만 받습니다. 채널을 바꿔도 이전 버전으로 내려가지 않습니다.\n다운로드와 설치는 동의한 뒤 진행합니다.",13,InvestigationTheme.TEXT_DIM)
 	game.ui.update_status = text(updates,"")
 	game.ui.update_bar = ProgressBar.new()
 	game.ui.update_bar.show_percentage = false

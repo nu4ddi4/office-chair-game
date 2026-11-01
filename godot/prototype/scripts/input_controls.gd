@@ -16,7 +16,6 @@ var mobile = OS.has_feature("mobile") or "--mobile-qa" in OS.get_cmdline_user_ar
 var touch_enabled = false
 var keyboard_seen = false
 var automatic_updates = true
-var beta_preview_choice = null
 var game: InvestigationPrototype
 var root: Control
 var stick: Stick
@@ -33,9 +32,11 @@ var testing = "--prototype-smoke" in OS.get_cmdline_user_args()
 
 func _init():
 	if not testing: config.load(CONFIG_PATH)
+	load_preferences()
+
+func load_preferences():
 	touch_enabled = bool(config.get_value("input","touch",mobile))
 	automatic_updates = bool(config.get_value("updates","automatic",true))
-	if config.has_section_key("updates","beta_preview"): beta_preview_choice = bool(config.get_value("updates","beta_preview"))
 
 func setup(controller: InvestigationPrototype):
 	game = controller
@@ -112,23 +113,41 @@ func reset():
 	config.clear()
 	touch_enabled = mobile
 	automatic_updates = true
-	beta_preview_choice = null
 	apply()
 	changed.emit()
 
-# Beta builds follow beta by default; stable builds opt in from settings.
+# Keep older preview preferences as a one-time fallback; new choices are explicit.
+func update_channel(build_channel: String) -> String:
+	return NativeUpdatePolicy.chosen_channel(config,build_channel)
+
 func beta_preview_enabled(beta_build: bool) -> bool:
-	return beta_build if beta_preview_choice == null else bool(beta_preview_choice)
+	return update_channel("beta" if beta_build else "stable") == "beta"
 
 func set_beta_preview(value: bool):
-	beta_preview_choice = value
-	config.set_value("updates","beta_preview",value)
-	_save()
-	changed.emit()
+	set_update_channel("beta" if value else "stable")
 
-func _save():
+func set_update_channel(value: String):
+	if value not in ["stable","beta"]: return
+	if game != null and game.updater != null and game.updater.state == "preparing":
+		changed.emit()
+		return
+	var old_channel = game.update_channel() if game != null else ""
+	var had_key = config.has_section_key("updates","channel")
+	var old_value = config.get_value("updates","channel","")
+	config.set_value("updates","channel",value)
+	if not _save():
+		if had_key: config.set_value("updates","channel",old_value)
+		else: config.erase_section_key("updates","channel")
+		changed.emit()
+		return
+	changed.emit()
+	if game != null and value != old_channel: game.update_channel_changed()
+
+func _save() -> bool:
 	if not testing and config.save(CONFIG_PATH) != OK:
-		game.ui.notice("설정을 저장하지 못했습니다. 현재 실행에는 적용됩니다.")
+		if game != null: game.ui.notice("설정을 저장하지 못했습니다. 다시 시도해 주세요.")
+		return false
+	return true
 
 func apply():
 	release_touches()
