@@ -8,6 +8,7 @@ var arms: Array[Node3D] = []
 var course: Node3D
 var key = ""
 var stride = 0.0
+var camera_pose = Transform3D.IDENTITY
 var originals: Array[Node3D] = []
 var fragments: Array[Node3D] = []
 var animations: Array[Tween] = []
@@ -39,7 +40,7 @@ func setup(owner: InvestigationPrototype):
 		mesh_part(arm,Vector3(0,-.25,0),Vector3(.19,.6,.23),Color("29485c"))
 		mesh_part(arm,Vector3(0,-.59,0),Vector3(.18,.18,.21),Color("f1bf93"))
 		arms.append(arm)
-	game.player.enable_third_person()
+	avatar.hide()
 	course = Node3D.new()
 	course.name = "OvertimeRoofCourse"
 	add_child(course)
@@ -88,8 +89,8 @@ func prepare_stage():
 	if course.visible:
 		game.player.global_position = START+Vector3(0,.05,0)
 		game.player.rotation.y = -PI/2
+		game.player.camera.rotation = Vector3.ZERO
 	else: game.reset_player_pose()
-	game.player.camera.rotation = Vector3.ZERO
 	game.player.velocity = Vector3.ZERO
 
 func at_finish() -> bool:
@@ -109,6 +110,7 @@ func break_computer(id: String):
 	restore_computers()
 	var point = game.targets[id].global_position
 	if game.detailed_world and game.investigation_environment.anchors.has("APPROACH_"+id):
+		camera_pose = game.player.camera.transform
 		game.player.camera.reparent(game)
 		game.player.camera.global_position = game.investigation_environment.anchors["APPROACH_"+id].global_position+Vector3(0,1.65,0)
 		game.player.camera.look_at(point)
@@ -151,3 +153,8 @@ func restore_computers():
 	for node in fragments:
 		if is_instance_valid(node): node.queue_free()
 	fragments.clear()
+
+func restore_view():
+	if game.player.camera.get_parent() != game.player:
+		game.player.camera.reparent(game.player,false)
+		game.player.camera.transform = camera_pose
