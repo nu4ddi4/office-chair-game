@@ -69,7 +69,7 @@ var memo_status: Label
 var ready_memo = false
 var touch_setting: CheckButton
 var update_setting: CheckButton
-var preview_setting: CheckButton
+var channel_setting: OptionButton
 var input_status: Label
 var update_status: Label
 var update_bar: ProgressBar
@@ -576,7 +576,8 @@ func refresh_settings():
 	if update_status == null: return
 	touch_setting.set_pressed_no_signal(game.controls.touch_enabled)
 	update_setting.set_pressed_no_signal(game.controls.automatic_updates)
-	preview_setting.set_pressed_no_signal(game.beta_preview())
+	channel_setting.select(1 if game.update_channel() == "beta" else 0)
+	channel_setting.disabled = game.updater != null and game.updater.state == "preparing"
 	input_status.text = "터치와 키보드를 함께 사용할 수 있습니다." if game.controls.touch_enabled else "키보드·마우스 조작"
 	if game.controls.keyboard_seen: input_status.text += " · 키보드 입력 감지됨"
 	if is_instance_valid(binding_summary): binding_summary.text = LabInputBindings.summary(true)
@@ -963,9 +964,13 @@ func toggle():
 	dialogs.reverse()
 	for dialog in dialogs:
 		if dialog.visible:
+			if not dialog.dialog_close_on_escape: return
 			dialog.hide()
 			dialog.canceled.emit()
 			return
+	if is_instance_valid(settings_screen) and settings_screen.visible:
+		settings_screen.close_editor()
+		return
 	if modal_open: close()
 	else: open_pause()
 
@@ -1204,7 +1209,7 @@ func open_rebinding():
 	var editor = InvestigationSettingsScreen.new()
 	editor.game = game
 	editor.original_controls = {}
-	for key in ["touch_setting","update_setting","preview_setting","input_status","update_status","update_bar","update_check","update_download"]: editor.original_controls[key] = get(key)
+	for key in ["touch_setting","update_setting","channel_setting","input_status","update_status","update_bar","update_check","update_download"]: editor.original_controls[key] = get(key)
 	editor.configure(game.bindings,game.player)
 	editor.theme = root.theme
 	settings_screen = editor

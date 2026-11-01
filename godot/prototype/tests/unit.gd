@@ -14,11 +14,11 @@ func at(state: Dictionary, path: String):
 
 func _initialize():
 	var installed = {"version":"0.2.0","prerelease":true,"tag_prefix":"SecurityLab-proto-"}
-	var candidates = [release_fixture("0.3.0",false),release_fixture("0.2.1",true),release_fixture("0.10.0",true)]
-	check(InvestigationUpdates.select_release(candidates,installed,"Android",true).version == "0.10.0","Beta preview uses numeric versions and the newest release of either kind")
+	var candidates = [release_fixture("0.3.0",false),release_fixture("0.2.1-beta.1",true),release_fixture("0.10.0-beta.2",true)]
+	check(InvestigationUpdates.select_release(candidates,installed,"Android","beta").version == "0.10.0-beta.2","Beta selection follows only the beta channel")
 	check(InvestigationUpdates.select_release(candidates,installed,"Android").version == "0.3.0","Without the preview a beta install only follows stable releases")
 	installed.prerelease = false
-	check(InvestigationUpdates.select_release(candidates,installed,"Windows",true).version == "0.10.0","A stable install receives beta builds only after opting in")
+	check(InvestigationUpdates.select_release(candidates,installed,"Windows","beta").version == "0.10.0-beta.2","A stable install receives beta builds only after opting in")
 	check(InvestigationUpdates.select_release(candidates,installed,"Windows").version == "0.3.0","Stable installs never offer prereleases")
 	check(InvestigationUpdates.select_release(candidates,installed,"Android").url.ends_with(".apk"),"Android receives an APK")
 	check(InvestigationUpdates.select_release(candidates,installed,"Windows").url.ends_with(".exe"),"Windows receives an EXE")
@@ -52,6 +52,10 @@ func _initialize():
 	check(InvestigationUpdates.select_release([portable],installed,"Windows").url == portable_asset.browser_download_url,"Portable-only releases remain discoverable")
 	portable.assets[1].browser_download_url = "https://example.com/Portable.exe"
 	check(InvestigationUpdates.select_release([portable],installed,"Windows").url == "","Portable downloads keep the exact trusted repository URL check")
+	var channel_metadata = {"version":"0.5.0-beta.2","tag_prefix":"SecurityLab-proto-"}
+	check(InvestigationUpdates.select_release([release_fixture("0.4.9",false)],channel_metadata,"Windows","stable").is_empty(),"Switching beta 0.5.0 to stable 0.4.9 never downgrades")
+	check(InvestigationUpdates.select_release([release_fixture("0.5.0",false)],channel_metadata,"Windows","stable").version == "0.5.0","A final release of the same core is newer than its beta")
+	check(InvestigationUpdates.select_release([release_fixture("0.9.0",false),release_fixture("0.5.1-beta.1",true)],channel_metadata,"Windows","beta").version == "0.5.1-beta.1","A selected beta channel never follows a higher stable release")
 	var content = InvestigationContent.load_case()
 	check(not content.has("error"),"Content loads")
 	if content.has("error"): quit(1); return
@@ -424,6 +428,10 @@ func stage_checks(content: Dictionary):
 		check(replay.stage.cleared.size() == 6 and replay.stage.unlocked == 6,"Replaying a loaded stage does not duplicate numeric clear IDs or relock later stages")
 	var fresh = engine.create_state()
 	check(engine.step(fresh,{"type":"stage.select","payload":{"index":6}}).state == fresh,"A locked stage cannot be selected through an action")
+	for malformed in [null,42,"bad",{},true]:
+		var invalid = fresh.duplicate(true)
+		invalid.stage.cleared = malformed
+		check(not TerminalStagesEngine.valid_progress(invalid.stage),"Malformed stage clear lists are rejected without a script error")
 	var tampered = JSON.parse_string(InvestigationSaveCodec.encode(fresh,content))
 	tampered.state.stage.unlocked = 6
 	check(InvestigationSaveCodec.decode(JSON.stringify(tampered),content).has("error"),"Save validation rejects forged stage unlocks")

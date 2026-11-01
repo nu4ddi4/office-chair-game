@@ -28,14 +28,14 @@ func meta_for(pack: String, version: String, commit: String, compat: String) -> 
 
 func _init():
 	var compat = "a".repeat(64)
-	var bundled = {"version":"0.9.0-beta.1","compat":compat,"commit":"1".repeat(40)}
+	var bundled = {"version":"0.9.0-beta.1","channel":"beta","compat":compat,"commit":"1".repeat(40)}
 	var root_directory = "user://qa/content-test/"+Crypto.new().generate_random_bytes(8).hex_encode()
 
 	# Which packs may run on which executable.
 	var pack_a = build_pack(root_directory,"a","from the first pack")
 	var good = meta_for(pack_a,"0.9.0-beta.2","b".repeat(40),compat)
 	expect(ContentBootstrap.usable(good,bundled),"a newer pack for the same compat key is usable")
-	for case in [["compat",{"compat":"c".repeat(64)}],["older",{"version":"0.9.0-beta.1"}],["commit",{"commit":"zz"}],["hash",{"sha256":"short"}],["version type",{"version":2}]]:
+	for case in [["channel",{"channel":"stable"}],["compat",{"compat":"c".repeat(64)}],["older",{"version":"0.9.0-beta.1"}],["commit",{"commit":"zz"}],["hash",{"sha256":"short"}],["version type",{"version":2}]]:
 		expect(not ContentBootstrap.usable(good.merged(case[1],true),bundled),"unusable pack: "+case[0])
 	expect(not ContentBootstrap.usable(good,{"version":"0.9.0-beta.1"}),"an executable without a compat key never takes a pack")
 	expect(ContentBootstrap.directory(PackedStringArray(["--content-dir=C:/elsewhere"]))==ContentBootstrap.DEFAULT_DIRECTORY,"players cannot redirect the content directory")
@@ -76,6 +76,17 @@ func _init():
 	expect(ContentBootstrap.activate_pending(dir,bundled) and FileAccess.file_exists(dir.path_join("previous.pck")),"the confirmed pack stays as rollback")
 	ContentBootstrap.recover_interrupted(dir)
 	expect(ContentBootstrap.read_json(dir.path_join("active.json")).get("commit")=="e".repeat(40),"rollback restores the confirmed pack")
+
+	# A cached pending file cannot downgrade the already active pack or bypass a new channel choice.
+	DirAccess.copy_absolute(ProjectSettings.globalize_path(pack_a),ProjectSettings.globalize_path(dir.path_join("pending.pck")))
+	write(dir.path_join("pending.json"),JSON.stringify(good))
+	expect(not ContentBootstrap.activate_pending(dir,bundled),"an older pending pack cannot replace the newer active pack")
+	expect(ContentBootstrap.read_json(dir.path_join("active.json")).get("version") == "0.9.0-beta.4","rejecting a stale pending pack preserves the running version")
+	DirAccess.copy_absolute(ProjectSettings.globalize_path(pack_b),ProjectSettings.globalize_path(dir.path_join("pending.pck")))
+	write(dir.path_join("pending.json"),JSON.stringify(third))
+	expect(not ContentBootstrap.activate_pending(dir,bundled,"stable"),"a pending beta pack cannot apply after selecting stable")
+	for size in [null,"bad",-1,1.5]:
+		expect(not ContentBootstrap.pack_matches(pack_a,good.merged({"size":size},true)),"malformed pack sizes are rejected without a script error")
 
 	# A newly installed executable that already carries the data drops the older pack.
 	expect(ContentBootstrap.load_active(dir,{"version":"0.9.0-beta.9","compat":compat,"commit":"2".repeat(40)}).is_empty() and not FileAccess.file_exists(dir.path_join("active.pck")),"a pack older than the executable is dropped")

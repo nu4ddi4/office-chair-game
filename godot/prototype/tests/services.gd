@@ -19,6 +19,10 @@ class Host extends Node:
 class TestUpdater extends InvestigationInstallerUpdates:
 	var executable = ""
 	func executable_path() -> String: return executable
+class ChannelTestUpdater extends LabUpdater:
+	var chosen = "beta"
+	func selected_channel() -> String: return chosen
+
 var failures = []
 var assertions = 0
 func check(condition: bool, message: String):
@@ -30,6 +34,53 @@ func write(path: String, value: String):
 	file.store_string(value); file.close()
 func _ready(): run.call_deferred()
 func run():
+	var choices = InvestigationControls.new()
+	choices.testing = true
+	choices.config.clear()
+	choices.load_preferences()
+	check(choices.update_channel("beta") == "beta" and choices.update_channel("stable") == "stable","Without a preference, each build follows its own channel")
+	choices.config.set_value("updates","beta_preview",false)
+	choices.load_preferences()
+	check(choices.update_channel("beta") == "stable","Old preview-off preferences migrate to stable")
+	choices.set_update_channel("beta")
+	choices.load_preferences()
+	check(choices.update_channel("stable") == "beta","The explicit beta choice survives a stable build and preference reload")
+	choices.set_update_channel("stable")
+	choices.load_preferences()
+	check(choices.update_channel("beta") == "stable","The explicit stable choice survives a beta build")
+	choices.free()
+	var candidate = ChannelTestUpdater.new()
+	add_child(candidate)
+	candidate.info = {"channel":"beta","version":"0.5.0-beta.1","app_id":"security-lab-beta"}
+	candidate.source = NativeUpdatePolicy.manifest_url("beta","security-lab-beta")
+	candidate.manifest = {"channel":"beta","version":"0.5.1-beta.1"}
+	check(candidate.build_sources().size() == 1 and candidate.build_sources()[0].channel == "beta","The native updater reads only selected beta")
+	candidate.chosen = "stable"
+	check(candidate.build_sources().size() == 1 and candidate.build_sources()[0].channel == "stable","The native updater reads only selected stable")
+	candidate.manifest = {"channel":"stable","version":"0.4.9"}
+	check(not candidate.candidate_current(),"A channel change never authorizes stable 0.4.9 over beta 0.5.0")
+	candidate.enabled = true
+	candidate.state = "available"
+	candidate.confirm_update()
+	check(candidate.state == "failed" and not candidate.consent_granted,"Downgrades are rechecked at consent time")
+	candidate.manifest = {"channel":"stable","version":"0.5.0"}
+	candidate.state = "available"
+	var previous_epoch = candidate.request_epoch
+	candidate.cancel_pending()
+	candidate.enabled = true
+	candidate.state = "available"
+	candidate.manifest = {"channel":"stable","version":"0.6.0"}
+	candidate.confirm_update(previous_epoch,{"channel":"stable","version":"0.5.0"})
+	check(not candidate.consent_granted and candidate.state == "available","An old dialog cannot authorize the newly selected update")
+	candidate.state = "checking"
+	candidate.response(HTTPRequest.RESULT_SUCCESS,200,[],"{}".to_utf8_buffer(),previous_epoch)
+	check(candidate.state == "checking","A canceled check cannot change the state through a late response")
+	candidate.state = "ready"
+	candidate.consent_granted = true
+	candidate.manifest = {"channel":"beta","version":"0.9.0-beta.1"}
+	await candidate.install()
+	check(candidate.state == "failed" and candidate.helper_pid == -1,"A ready file from another channel cannot reach installation")
+	candidate.queue_free()
 	var host = Host.new(); get_tree().root.add_child(host); host.add_child(host.player)
 	host.content = InvestigationContent.load_case()
 	host.state = InvestigationEngine.new(host.content).create_state()
