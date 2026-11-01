@@ -43,6 +43,7 @@ var host: Host
 var mode = ""
 var original_directory = ""
 var failure = ""
+var switch_safe = true
 
 func _init(): run.call_deferred()
 
@@ -50,7 +51,7 @@ func run():
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--fixture-mode="): mode = argument.trim_prefix("--fixture-mode=")
 	host = Host.new(); root.add_child(host)
-	host.preview = mode != "preview-off"
+	host.preview = mode not in ["preview-off","stable-older","selected-channel-down","invalid-other-source"]
 	var nonce = Crypto.new().generate_random_bytes(16).hex_encode()
 	original_directory = "user://qa/updater-network/"+nonce
 	host.store.directory = original_directory
@@ -64,13 +65,28 @@ func run():
 	DirAccess.make_dir_recursive_absolute(manager.fixture_content)
 	if mode=="content-rejected": ContentBootstrap.reject(manager.fixture_content,"a".repeat(40))
 	manager.status_changed.connect(func(message): failure = message)
-	if mode in ["dialog-dismiss","dialog-close","dialog-confirm"]:
+	if mode in ["dialog-dismiss","dialog-close","dialog-confirm","switch-consent"]:
 		host.ui = FixtureUI.new(); host.add_child(host.ui)
 		host.player = FixturePlayer.new(); host.add_child(host.player)
 	manager.setup(host)
-	for i in range(200):
-		if manager.state in ["available","failed","disabled"]: break
+	if mode == "switch-inflight":
 		await create_timer(.1).timeout
+		host.preview = false
+		manager.channel_changed()
+	for i in range(200):
+		if manager.state in ["available","failed","disabled"] or (mode in ["stable-older","same-version"] and manager.state == "idle" and manager.verified_sources > 0): break
+		await create_timer(.1).timeout
+	if mode == "switch-consent":
+		var old_epoch = manager.request_epoch
+		var old_manifest = manager.manifest.duplicate(true)
+		switch_safe = manager.consent_dialog != null
+		host.preview = false
+		manager.channel_changed()
+		manager.confirm_update(old_epoch,old_manifest)
+		switch_safe = switch_safe and not manager.consent_granted and not manager.install_requested
+		for i in range(200):
+			if manager.state in ["available","failed"]: break
+			await create_timer(.05).timeout
 	var success = false
 	if mode in ["no-consent","declined","dialog-dismiss","dialog-close"]:
 		success = manager.state=="available" and manager.stage=="" and not manager.consent_granted and not manager.install_requested
@@ -96,7 +112,24 @@ func run():
 			if manager.state in ["ready","failed","disabled"]: break
 			await create_timer(.1).timeout
 		await create_timer(.1).timeout
-	if mode=="retry-after-failure":
+	if mode == "switch-ready" and manager.state == "ready":
+		var old_path = manager.download_path()
+		host.preview = false
+		manager.install_requested = false
+		manager.channel_changed()
+		await manager.super_install_without_consent()
+		switch_safe = not manager.consent_granted and not manager.install_requested and not FileAccess.file_exists(old_path)
+		for i in range(200):
+			if manager.state in ["available","failed"]: break
+			await create_timer(.05).timeout
+		if manager.state == "available": manager.confirm_update()
+		for i in range(200):
+			if manager.state in ["ready","failed"]: break
+			await create_timer(.05).timeout
+		await create_timer(.05).timeout
+	if mode in ["stable-older","same-version"]:
+		success = manager.state == "idle" and manager.stage == "" and not manager.consent_granted and not manager.install_requested
+	elif mode=="retry-after-failure":
 		# The first answer is a server error; a later manual check must still work.
 		success = manager.state=="failed"
 		manager.check()
@@ -104,7 +137,7 @@ func run():
 			if manager.state in ["available","failed","disabled"]: break
 			await create_timer(.1).timeout
 		success = success and manager.state=="available"
-	elif mode in ["ready","redirect-ready","helper-launch","save-failure","health-validation","bad-save-health","dialog-confirm","preview-newer-stable","preview-other-down","preview-off","content-update","content-mismatch","content-rejected"]:
+	elif mode in ["ready","redirect-ready","helper-launch","save-failure","health-validation","bad-save-health","dialog-confirm","preview-newer-stable","preview-other-down","preview-off","content-update","content-mismatch","content-rejected","switch-inflight","switch-consent","switch-ready"]:
 		success = manager.state=="ready" and manager.installer_verified() and manager.consent_granted and manager.install_requested
 		success = success and manager.kind==("content" if mode=="content-update" else "installer")
 		if mode=="content-update":
@@ -113,7 +146,9 @@ func run():
 			await manager.install()
 			var pending = ContentBootstrap.read_json(manager.fixture_content.path_join("pending.json"))
 			success = success and manager.restart_requested and pending.get("commit")==manager.manifest.commit and pending.get("sha256")==manager.manifest.content_sha256 and pending.get("compat")==manager.manifest.compat and FileAccess.file_exists(manager.fixture_content.path_join("pending.pck")) and host.store.load_state(host.content).has("state")
-		if mode in ["preview-newer-stable","preview-off"]: success = success and manager.manifest.channel=="stable"
+		if mode in ["switch-inflight","switch-consent","switch-ready"]: success = success and manager.manifest.channel == "stable"
+		if mode=="preview-off": success = success and manager.manifest.channel=="stable"
+		if mode=="preview-newer-stable": success = success and manager.manifest.channel=="beta"
 		if mode=="preview-other-down": success = success and manager.manifest.channel=="beta"
 		if mode=="dialog-confirm": success = success and manager.consent_dialog==null and host.player.enabled
 		if success and mode=="helper-launch":
@@ -135,6 +170,7 @@ func run():
 			manager.acknowledge_health(manager.token)
 			success = FileAccess.file_exists(manager.stage.path_join("health.json"))==(mode=="health-validation")
 	elif mode not in ["no-consent","declined","dialog-dismiss","dialog-close","retry-after-failure"]: success = manager.state==("disabled" if mode=="disabled" else "failed") and not manager.consent_granted
+	success = success and switch_safe
 	print("NATIVE_UPDATE_NETWORK ",JSON.stringify({"passed":success,"mode":mode,"state":manager.state,"message":failure,"installer_verified":manager.installer_verified() if manager.state=="ready" else false,"save_directory":ProjectSettings.globalize_path(original_directory)}))
 	quit(0 if success else 1)
 

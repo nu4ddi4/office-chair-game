@@ -58,6 +58,12 @@ function Get-HelperFailure($Helper,[string]$Stage,[int]$TimeoutSeconds) {
     }
     $details -join '; '
 }
+Expect (Test-NewerUpdateVersion '0.5.1' '0.5.0') 'stable upgrades compare without prerelease fields'
+Expect (-not (Test-NewerUpdateVersion '0.5.0' '0.5.0')) 'equal stable versions stay installed'
+Expect (-not (Test-NewerUpdateVersion '0.4.9' '0.5.0-beta.1')) 'channel switch rejects a lower stable core'
+Expect (Test-NewerUpdateVersion '0.5.0' '0.5.0-beta.1') 'same-core stable advances a beta'
+Expect (-not (Test-NewerUpdateVersion '0.5.0-beta.99' '0.5.0')) 'same-core beta cannot downgrade stable'
+Expect (Test-NewerUpdateVersion '0.7.1-beta.9999999999999999999999999999999' '0.7.1-beta.9999999999999999999999999999998') 'large prerelease comparison avoids overflow'
 # Channel switching (opt-in beta preview and the way back) is limited to the beta product.
 foreach ($pair in @(@('stable','beta'),@('beta','stable'),@('beta','beta'))) { Expect (Test-UpdateChannelTransition $true $pair[0] $pair[1]) ('beta product may move '+$pair[0]+' to '+$pair[1]) }
 foreach ($pair in @(@('dev','beta'),@('beta','dev'),@('stable','dev'),@('dev','stable'))) { Expect (-not (Test-UpdateChannelTransition $true $pair[0] $pair[1])) ('dev never switches: '+$pair[0]+' to '+$pair[1]) }

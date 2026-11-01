@@ -45,6 +45,7 @@ static func move(from: String, to: String) -> bool:
 static func usable(meta: Dictionary, bundled: Dictionary) -> bool:
 	if not (NativeUpdatePolicy.hex(meta.get("sha256"),64) and NativeUpdatePolicy.hex(meta.get("commit"),40) and NativeUpdatePolicy.hex(meta.get("compat"),64)): return false
 	if not meta.get("version") is String or not NativeUpdatePolicy.hex(bundled.get("compat"),64): return false
+	if meta.get("channel") != bundled.get("channel") or not NativeUpdatePolicy.valid_version(meta.version,String(meta.get("channel",""))): return false
 	return meta.compat == bundled.compat and NativeUpdatePolicy.newer(meta.version,String(bundled.get("version","")))
 
 static func rejected(dir: String) -> Array:
@@ -58,14 +59,27 @@ static func reject(dir: String, commit: String):
 	write_json(dir.path_join("rejected.json"),{"commits":commits.slice(maxi(0,commits.size()-REJECTED_LIMIT))})
 
 static func pack_matches(path: String, meta: Dictionary) -> bool:
-	return FileAccess.file_exists(path) and FileAccess.get_sha256(path) == String(meta.get("sha256","")) and (not meta.has("size") or FileAccess.open(path,FileAccess.READ).get_length() == int(meta.size))
+	var file = FileAccess.open(path,FileAccess.READ)
+	if file == null: return false
+	var length = file.get_length()
+	file.close()
+	if meta.has("size"):
+		var size = meta.size
+		if not (size is int or size is float) or not is_finite(float(size)) or size != int(size) or size <= 0 or size > NativeUpdatePolicy.MAX_CONTENT_BYTES or length != int(size): return false
+	return FileAccess.get_sha256(path) == String(meta.get("sha256",""))
 
 # The pack just downloaded becomes the active one; the old active pack stays as the rollback.
-static func activate_pending(dir: String, bundled: Dictionary) -> bool:
+static func activate_pending(dir: String, bundled: Dictionary, selected = "") -> bool:
 	var meta = read_json(dir.path_join("pending.json"))
 	var pack = dir.path_join("pending.pck")
 	if meta.is_empty() and not FileAccess.file_exists(pack): return false
-	if not usable(meta,bundled) or not pack_matches(pack,meta):
+	if (selected != "" and meta.get("channel") != selected) or not usable(meta,bundled) or not pack_matches(pack,meta):
+		reject(dir,String(meta.get("commit","")))
+		remove(pack)
+		remove(dir.path_join("pending.json"))
+		return false
+	var current = read_json(dir.path_join("active.json"))
+	if usable(current,bundled) and pack_matches(dir.path_join("active.pck"),current) and not NativeUpdatePolicy.newer(meta.version,current.version):
 		reject(dir,String(meta.get("commit","")))
 		remove(pack)
 		remove(dir.path_join("pending.json"))
@@ -140,7 +154,9 @@ func _ready():
 	if wanted(args,OS.get_name()):
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
 		recover_interrupted(dir)
-		activate_pending(dir,bundled)
+		var config = ConfigFile.new()
+		if "--prototype-smoke" not in args: config.load("user://controls.cfg")
+		activate_pending(dir,bundled,NativeUpdatePolicy.chosen_channel(config,bundled.get("channel","stable")))
 		loaded = load_active(dir,bundled)
 	if not loaded.is_empty():
 		Engine.set_meta("content_pack",loaded)
