@@ -33,13 +33,15 @@ static func select_release(releases: Array, metadata: Dictionary, target: String
 		best = {"version":version,"url":""}
 		var extension = {"Android":".apk","Windows":".exe"}.get(target,"")
 		if extension == "": continue
-		var filename = tag+extension
-		var expected_url = DOWNLOAD+tag.uri_encode()+"/"+filename.uri_encode()
+		var filenames = [tag+"-Portable.exe",tag+".exe"] if target == "Windows" else [tag+extension]
 		var assets = release.get("assets",[])
 		if not assets is Array: continue
-		for asset in assets:
-			if asset is Dictionary and asset.get("name") == filename and asset.get("state") == "uploaded" and typeof(asset.get("size",0)) in [TYPE_INT,TYPE_FLOAT] and asset.get("size",0) > 0 and asset.get("browser_download_url") == expected_url:
-				best.url = expected_url
+		for filename in filenames:
+			var expected_url = DOWNLOAD+tag.uri_encode()+"/"+filename.uri_encode()
+			for asset in assets:
+				if asset is Dictionary and asset.get("name") == filename and asset.get("state") == "uploaded" and typeof(asset.get("size",0)) in [TYPE_INT,TYPE_FLOAT] and asset.get("size",0) > 0 and asset.get("browser_download_url") == expected_url:
+					best.url = expected_url
+			if best.url != "": break
 	return best
 
 func _ready():
