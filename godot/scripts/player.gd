@@ -4,6 +4,7 @@ extends CharacterBody3D
 signal inspect_requested(target: Node)
 signal tool_requested(target: Node)
 signal pause_requested
+signal empty_interaction_requested
 var camera: Camera3D
 var ray: RayCast3D
 var shape: CollisionShape3D
@@ -18,6 +19,8 @@ var sensitivity = 0.0018
 var body_height = 1.8
 var jump_peak = 0.0
 var jump_count = 0
+var jump_buffer = 0.0
+var coyote_time = 0.0
 var standing_shape = CapsuleShape3D.new()
 var unified_interaction = false
 var interaction_reach = 3.4
@@ -62,7 +65,9 @@ func _unhandled_input(event):
 	if event is InputEventMouseMotion and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		look(event.relative)
 	if not unified_interaction and event.is_action_pressed("inspect") and target != null: inspect_requested.emit(target)
-	if event.is_action_pressed("tool") and target != null: interact()
+	if event.is_action_pressed("tool"):
+		if target != null: interact()
+		else: empty_interaction_requested.emit()
 
 func _ready():
 	collision_layer = 8
@@ -101,6 +106,8 @@ func set_enabled(value: bool):
 	if not value:
 		velocity = Vector3.ZERO
 		touch_axes = Vector2.ZERO
+		jump_buffer = 0
+		coyote_time = 0
 
 func look(relative: Vector2):
 	if not enabled or input_blocked(): return
@@ -165,9 +172,14 @@ func _physics_process(delta):
 	var speed = 1.35 if crouched else 4.2 if Input.is_action_pressed("sprint") else 2.6
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
-	if is_on_floor() and Input.is_action_just_pressed("jump"):
+	jump_buffer = maxf(0,jump_buffer-delta)
+	coyote_time = .10 if is_on_floor() else maxf(0,coyote_time-delta)
+	if Input.is_action_just_pressed("jump"): jump_buffer = .12
+	if jump_buffer > 0 and coyote_time > 0:
 		velocity.y = 4.3
 		jump_count += 1
+		jump_buffer = 0
+		coyote_time = 0
 	elif not is_on_floor(): velocity.y -= 12.5 * delta
 	else: velocity.y = 0
 	move_and_slide()

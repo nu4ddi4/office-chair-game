@@ -17,5 +17,5 @@ static func load_case() -> Dictionary:
 			if not result.case.devices.has(id): return {"error": "알 수 없는 장비 ID"}
 	for question in result.dialogue:
 		if not result.case.npcs.has(question.npc) or question.record != "" and not result.records.has(question.record): return {"error": "대화 자료 참조 오류"}
-	if not result.stages is Array or result.stages.size() != 6: return {"error":"스테이지 자료 형식 오류"}
+	if not result.stages is Array or result.stages.size() != 1: return {"error":"스테이지 자료 형식 오류"}
 	return result

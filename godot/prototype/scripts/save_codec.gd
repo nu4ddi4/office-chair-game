@@ -25,6 +25,7 @@ static func decode(raw: String, content: Dictionary) -> Dictionary:
 		for key in ["version","index","unlocked","mistakes","blasts","attempt"]: state.stage[key] = int(state.stage[key])
 		if state.stage.has("entered"): state.stage.entered = int(state.stage.entered)
 		state.stage.cleared = state.stage.cleared.map(func(value): return int(value))
+		if state.stage.version == TerminalStagesEngine.CAMPAIGN_VERSION: state.stage.print.stacks = int(state.stage.print.stacks)
 	return {"state":state}
 
 static func whole(value, low: int, high: int) -> bool:

@@ -221,7 +221,7 @@ def main():
             # portrait captures can exceed three minutes with the furnished map.
             run([str(executable), '--audio-driver', 'Dummy', '--', '--prototype-smoke',
                  '--prototype-capture-dir=' + str(captures)], directory, 'INVESTIGATION_SMOKE', timeout=300)
-            expected = ['00-main-menu', '01-intro', '02-practice', '03-terminal', '04-clear', '05-explosion', '06-stages', '07-settings', '08-finish']
+            expected = ['00-main-menu', '01-intro', '02-practice', '03-terminal', '04-clear', '05-paper-flood', '06-stages', '07-settings', '08-finish']
             if any(not (captures / (name + '.png')).is_file() for name in expected):
                 raise SystemExit('Exported Windows UI captures are incomplete.')
             print('Rendered Windows EXE UI and interaction passed.')
