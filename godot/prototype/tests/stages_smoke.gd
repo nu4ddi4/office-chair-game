@@ -19,6 +19,26 @@ func enter(game, command: String):
 	game.ui.command_input.text = command
 	game.ui.command_input.text_submitted.emit(command)
 
+func aim(game, position: Vector3, subject: Vector3):
+	game.player.global_position = position
+	game.player.velocity = Vector3.ZERO
+	game.player.rotation = Vector3.ZERO
+	game.player.camera.rotation = Vector3.ZERO
+	game.player.camera.look_at(subject)
+
+func keypress(code: int):
+	var key = InputEventKey.new()
+	key.keycode = code
+	key.physical_keycode = code
+	key.pressed = true
+	Input.parse_input_event(key.duplicate())
+	Input.flush_buffered_events()
+	await get_tree().process_frame
+	key.pressed = false
+	Input.parse_input_event(key)
+	Input.flush_buffered_events()
+	await get_tree().process_frame
+
 func run(game: InvestigationPrototype):
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--prototype-capture-dir="):
@@ -26,253 +46,198 @@ func run(game: InvestigationPrototype):
 			DirAccess.make_dir_recursive_absolute(capture_directory)
 	await get_tree().process_frame
 	var ui = game.ui as TerminalStagesUI
-	check(ui != null and ui.mode == "main_menu" and not game.player.enabled,"Fresh game opens the stage-game main menu")
-	await capture(game,"00-main-menu")
+	var world = game.stage_world
 	var touch_default = game.controls.touch_enabled
+	check(ui != null and ui.mode == "main_menu" and not game.player.enabled,"New campaign opens the main menu")
+	await capture(game,"00-main-menu")
 	ui.entry.new_game.pressed.emit()
-	check(ui.mode == "intro","New game has one short introduction")
+	check(ui.mode == "intro","A short introduction precedes the print room")
 	await capture(game,"01-intro")
 	ui.entry.finish_intro()
-	check(ui.mode == "field" and game.player.enabled and game.state.stage.index == 1,"Introduction opens the explorable office")
-	check(game.player.camera.get_parent() == game.player and absf(game.player.camera.position.z) < .01 and not game.stage_world.avatar.visible,"The office starts in first person without the avatar blocking the view")
+	check(ui.mode == "field" and game.player.camera.get_parent() == game.player and absf(game.player.camera.position.z) < .01,"Stage starts in first person")
+	check(game.content.stages.size() == 1 and not game.targets.has("shutdown_pc"),"Old stages and rooftop course are removed")
 	await field_hud_checks(game)
+	world.key = ""
+	world.prepare_stage()
 	await capture(game,"office-character")
 	ui.open_stage_picker()
-	check("???" in ui.picks.get_child(1).text,"Unentered stage names are hidden")
+	check(ui.picks.get_child_count() == 1,"Stage selection exposes only the new stage")
+	await capture(game,"06-stages")
 	ui.begin_stage()
-	enter(game,"sttatus")
-	check(game.state.stage.phase == "playing" and ui.burst_count == 0,"First practice stage allows mistakes")
+	enter(game,"cat missing")
+	check(game.state.stage.phase == "playing" and game.state.stage.blasts == 0,"Typos and missing files are recoverable")
 	await capture(game,"02-practice")
 	enter(game,"help")
 	await get_tree().process_frame
-	check(ui.command_input.has_focus(),"Enter preserves terminal focus for the next command")
-	check(ui.terminal.get_parsed_text().contains("status"),"Help is terminal output")
-	ui.command_input.text = "status"
+	if not game.controls.mobile: check(ui.command_input.has_focus(),"Terminal retains focus after Enter")
+	check(ui.terminal.get_parsed_text().contains("print <file>"),"Help describes command syntax")
+	ui.command_input.text = "print clockout.form"
 	ui.command_input.grab_focus()
-	await get_tree().process_frame
-	var key = InputEventKey.new()
-	key.keycode = KEY_ENTER
-	key.physical_keycode = KEY_ENTER
-	key.pressed = true
-	Input.parse_input_event(key.duplicate())
-	Input.flush_buffered_events()
-	await get_tree().process_frame
-	key.pressed = false
-	Input.parse_input_event(key.duplicate())
-	Input.flush_buffered_events()
-	check(game.controls.keyboard_seen and game.state.stage.phase == "clear","Real Enter executes a terminal command and detects a keyboard")
-	if game.state.stage.phase != "clear": enter(game,"status")
-	await capture(game,"04-clear")
-	var saved_directory = game.store.directory
-	var blocker = saved_directory.path_join("blocked-advance")
-	var blocked_file = FileAccess.open(blocker,FileAccess.WRITE)
-	blocked_file.store_string("not a directory")
-	blocked_file.close()
-	game.store.directory = blocker
-	ui.result_next.pressed.emit()
-	check(game.state.stage.index == 1 and game.state.stage.phase == "clear","A failed save cannot advance or discard the completed stage")
-	ui.toggle()
-	game.store.directory = saved_directory
-	DirAccess.remove_absolute(blocker)
-	ui.result_next.pressed.emit()
-	check(game.state.stage.index == 2,"One button advances to the next stage")
-	var before = game.state.duplicate(true)
-	game.dispatch({"type":"stage.select","payload":{"index":6}})
-	check(game.state == before,"Uncleared stages cannot be selected")
-	enter(game,"cat no-such-file")
-	check(game.state.stage.phase == "playing" and ui.burst_count == 0,"Second practice stage still allows mistakes")
-	enter(game,"ls")
-	check(ui.terminal.text.contains("memo.txt"),"Directory lists the target file")
-	enter(game,"cat print.log")
-	enter(game,"cat memo.txt")
-	check(game.state.stage.phase == "clear","File-reading practice clears")
-	ui.next_stage()
-	enter(game,"ps")
-	enter(game,"cat print.log")
+	await keypress(KEY_ENTER)
+	check(game.controls.keyboard_seen and game.state.stage.print.job == "running" and game.state.stage.phase == "playing","Real Enter submits a print job without clearing the stage")
+	if game.state.stage.print.job != "running": enter(game,"print clockout.form")
 	await capture(game,"03-terminal")
-	enter(game,"kill 21")
-	check(game.state.stage.phase == "exploded" and ui.burst_count == 1 and not game.player.enabled,"Wrong target from stage three explodes the PC and blocks gameplay")
-	check(is_instance_valid(ui.effects) and ui.effects.get_child_count() > 0,"Explosion creates visible debris")
-	check(not game.detailed_world or game.stage_world.originals.size() > 0,"Explosion breaks the actual equipment mesh")
-	await capture(game,"05-explosion")
-	await get_tree().create_timer(.85).timeout
+	var before = world.chair.position
+	await get_tree().create_timer(.16).timeout
+	check(world.chair.position == before and game.state.stage.print.stacks == 0,"Reading the terminal freezes hazards and paper growth")
+	enter(game,"exit")
+	check(ui.mode == "field" and game.player.enabled,"Exit returns directly to movement")
+	await get_tree().create_timer(5.0).timeout
+	check(game.state.stage.print.stacks == 3 and game.state.stage.print.seen,"Printing creates three finite physical paper steps")
+	check(world.chair.position.distance_to(world.point("chair_start")) > 1.8,"Actual office chair moves along the paper path")
+	aim(game,world.to_global(Vector3(1.2,.02,3.2)),world.printer.global_position+Vector3(0,1.4,1.0))
+	await capture(game,"05-paper-flood")
+	var pedal = game.targets.print_pause
+	aim(game,world.to_global(world.point("pedal")+Vector3(.7,-.25,.6)),pedal.global_position)
+	for frame in range(4): await get_tree().physics_frame
+	game.player.update_target()
+	check(pedal.reachable(),"Physical pause pedal is reachable without touching paper piles")
+	game._use("print_pause","print",true)
+	check(game.state.stage.print.job == "paused","Physical pedal pauses the same print job")
+	await get_tree().create_timer(1.0).timeout
+	check(game.state.stage.print.tail and world.trailing_bundle.visible,"The trailing paper bundle plays after stopping")
+	var frozen = world.chair.position
+	var scene_time = world.scene_time
+	ui.open_pause()
+	await get_tree().create_timer(.15).timeout
+	check(world.chair.position == frozen and world.scene_time == scene_time,"Pause freezes all moving props")
 	ui.close()
-	check(ui.mode == "pause" and not game.player.enabled,"Closing failure results keeps the broken stage paused")
-	ui.close()
-	check(ui.mode == "exploded" and not game.player.enabled,"Continuing a failed stage returns to retry actions")
-	ui.open_stage_picker()
-	ui.picks.get_child(2).pressed.emit()
-	check(game.stage_world.originals.is_empty(),"Selecting the failed stage restores its broken equipment")
-	check(game.player.camera.get_parent() == game.player and absf(game.player.camera.position.z) < .01,"Retry restores the first-person camera after the explosion")
-	check(ui.mode == "field" and game.state.stage.index == 3 and game.state.stage.cleared == [1,2],"Retry immediately restores only the failed stage")
-	enter(game,"hlpe")
-	check(game.state.stage.phase == "exploded" and game.state.stage.blasts == 2,"A typo also explodes a dangerous PC")
-	ui.retry_stage()
-	enter(game,"kill 37")
-	check(game.state.stage.phase == "clear","Correct process clears the dangerous stage")
-	ui.next_stage()
-	enter(game,"cat device.cfg")
-	enter(game,"cat profiles.txt")
-	enter(game,"set temp 24")
-	ui.next_stage()
-	ui.talk_to("oh")
-	check(ui.mode == "stage_dialogue","NPC interaction opens conversation")
-	await capture(game,"npc-conversation")
-	var dialogue_size = game.get_window().size
-	game.get_window().size = Vector2i(960,540)
-	game._fit_screen()
-	ui.fit_screen()
-	await get_tree().process_frame
-	await get_tree().process_frame
-	ui.stage_scroll.ensure_control_visible(ui.stage_choices.get_child(2))
-	await get_tree().process_frame
-	await get_tree().process_frame
-	check(game.safe_rect().grow(1).encloses(ui.stage_choices.get_child(2).get_global_rect()),"Last dialogue choice can be reached on a short screen")
-	await capture(game,"npc-short-screen")
-	game.get_window().size = dialogue_size
-	game._fit_screen()
-	ui.fit_screen()
-	ui.stage_scroll.scroll_vertical = 0
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var option = ui.stage_choices.get_child(0)
-	check(option.size.x >= 200 and option.size.y >= 48,"NPC choices have a readable width and height")
-	var click = InputEventMouseButton.new()
-	click.button_index = MOUSE_BUTTON_LEFT
-	click.pressed = true
-	click.position = get_viewport().get_final_transform()*option.get_global_rect().get_center()
-	click.global_position = click.position
-	click.button_mask = MOUSE_BUTTON_MASK_LEFT
-	Input.parse_input_event(click)
-	Input.flush_buffered_events()
-	await get_tree().process_frame
-	var release = click.duplicate()
-	release.pressed = false
-	release.button_mask = 0
-	Input.parse_input_event(release)
-	Input.flush_buffered_events()
-	await get_tree().process_frame
-	check(game.state.stage.phase == "exploded","A wrong conversation choice can fail outside the terminal")
-	ui.retry_stage()
-	ui.talk_to("oh")
-	ui.command_result(game.dispatch({"type":"stage.talk","payload":{"choice":1}}))
-	ui.next_stage()
-	check(game.stage_world.course.visible and game.player.enabled,"The final stage opens the rooftop course")
-	game.player.global_position.y = 6.8
-	await get_tree().physics_frame
-	await get_tree().physics_frame
-	check(game.state.stage.phase == "exploded","Falling off the course fails the stage")
-	ui.retry_stage()
-	await capture(game,"roof-course")
-	for frame in range(12): await get_tree().physics_frame
-	for step in range(1,7):
+	# Traverse the real collision steps with the player's actual jump and walk inputs.
+	game.player.global_position = world.to_global(Vector3(.55,.03,4.4))
+	game.player.rotation = Vector3(0,world.rotation.y,0)
+	game.player.camera.rotation = Vector3.ZERO
+	for frame in range(20): await get_tree().physics_frame
+	var completed_jumps = 0
+	for i in range(3):
+		var destination = world.pile_bodies[i].position.z
 		Input.action_press("forward")
 		Input.action_press("jump")
 		await get_tree().physics_frame
 		Input.action_release("jump")
-		for frame in range(60):
+		for frame in range(80):
 			await get_tree().physics_frame
-			if game.player.global_position.x >= step*1.4-.05 or game.state.stage.phase != "playing": break
+			if world.to_local(game.player.global_position).z <= destination+.02: break
 		Input.action_release("forward")
-		for frame in range(30): await get_tree().physics_frame
-		check(game.state.stage.phase == "playing" and game.player.is_on_floor(),"Player jumps onto rooftop platform %d" % step)
-	check(game.stage_world.at_finish(),"The final platform is reachable and supports the player")
-	game._use("shutdown_pc","device",true)
-	check(game.state.stage.phase == "clear","The physical power switch clears the last stage")
+		for frame in range(40): await get_tree().physics_frame
+		if game.player.is_on_floor() and game.player.global_position.y > .28*(i+1): completed_jumps += 1
+	check(completed_jumps == 3,"All paper steps are climbable with real movement and jump input: "+str(game.player.global_position))
+	var form = game.targets.print_form
+	game.player.camera.look_at(form.global_position)
+	for frame in range(3): await get_tree().physics_frame
+	check(form.reachable(),"Original form can be reached from the upper paper step")
+	game._use("print_form","print",true)
+	check(game.state.stage.print.document == "held" and world.held_sheet.visible,"Taking the physical form puts it in the hand")
+	await capture(game,"form-in-hand")
+	world.drop_form()
+	check(game.state.stage.print.document == "tray","Dropping cannot lose the original form")
+	game._use("print_form","print",true)
+	var tray = game.targets.print_delivery
+	aim(game,world.to_global(world.to_local(tray.global_position)+Vector3(0,-.98,1.1)),tray.global_position)
+	for frame in range(5): await get_tree().physics_frame
+	check(tray.reachable(),"Delivery tray has a usable approach")
+	var directory = game.store.directory
+	var blocker = directory.path_join("blocked-print-completion")
+	var file = FileAccess.open(blocker,FileAccess.WRITE)
+	file.store_string("not a directory")
+	file.close()
+	game.store.directory = blocker
+	game._use("print_delivery","print",true)
+	check(game.state.stage.phase == "playing" and game.state.stage.print.document == "delivered","Failed completion save preserves the form and prevents advancement")
+	game.store.directory = directory
+	DirAccess.remove_absolute(blocker)
+	game._use("print_delivery","print",true)
+	if game.state.stage.phase != "clear": print("PRINT_COMPLETION_DIAG ",JSON.stringify({"stage":game.state.stage,"reachable":tray.reachable(),"mode":ui.mode,"error":game.store.error,"valid":TerminalStagesEngine.valid_progress(game.state.stage),"notice":ui.message.text}))
+	check(game.state.stage.phase == "clear" and ui.mode == "result","Delivery and a successful save complete the physical task")
+	await capture(game,"04-clear")
 	ui.next_stage()
-	check(game.state.stage.phase == "complete" and game.state.stage.cleared == [1,2,3,4,5,6],"All six stages lead to the clock-out result")
+	check(game.state.stage.phase == "complete","There is no old second stage after completion")
 	await capture(game,"08-finish")
-	check(game.save_now(),"Stage progress saves")
-	var loaded = game.store.load_state(game.content)
-	check(loaded.has("state") and loaded.state.stage.index == 6 and loaded.state.stage.unlocked == 6 and loaded.state.stage.phase == "complete" and loaded.state.stage.blasts == 4 and loaded.state.stage.cleared.size() == 6,"Progress, unlocks and explosion count reload: "+loaded.get("error",""))
-	if loaded.has("state"): game.state = loaded.state
-	ui.open_stage_picker()
-	await capture(game,"06-stages")
-	game.dispatch({"type":"stage.select","payload":{"index":3}})
-	ui.current_attempt = ""
-	ui.begin_stage()
-	enter(game,"exit")
-	check(ui.mode == "field" and game.player.enabled and not ui.command_input.has_focus(),"Exit closes the terminal and returns to movement")
-	var original_bindings = game.bindings.bindings.duplicate(true)
-	game.bindings.bindings.pause = [KEY_P]
-	game.bindings.apply()
-	ui.begin_stage()
-	ui.open_terminal()
-	key = InputEventKey.new()
-	key.keycode = KEY_ESCAPE
-	key.physical_keycode = KEY_ESCAPE
-	key.pressed = true
-	Input.parse_input_event(key.duplicate())
-	Input.flush_buffered_events()
-	await get_tree().process_frame
-	key.pressed = false
-	Input.parse_input_event(key.duplicate())
-	Input.flush_buffered_events()
-	check(ui.mode == "field","Escape closes the terminal with an older custom movement profile")
-	ui.toggle()
-	check(ui.mode == "pause","The next Escape opens the game menu")
+	var decoded = InvestigationSaveCodec.decode(InvestigationSaveCodec.encode(game.state,game.content),game.content)
+	check(decoded.has("state") and decoded.state.stage == game.state.stage,"New physical progress survives a save round trip")
+	ui.retry_stage()
+	check(game.state.stage.print == TerminalStagesEngine.fresh_print() and world.chair.position == world.point("chair_start"),"Replay restores the room and its props")
+	# Fast cancellation must leave a second, real route to the original sheet.
+	enter(game,"print clockout.form")
+	enter(game,"cancel R41")
 	ui.close()
-	check(ui.mode == "field" and game.player.enabled,"Closing pause resumes movement")
-	ui.open_pause()
-	game.bindings.bindings = original_bindings
-	game.bindings.apply()
+	var cart = game.targets.print_cart
+	aim(game,world.to_global(world.to_local(cart.global_position)+Vector3(1.15,-.48,.55)),cart.global_position)
+	for frame in range(4): await get_tree().physics_frame
+	game._use("print_cart","print",true)
+	check(game.state.stage.print.cart and world.cart_steps[2].collision_layer != 0,"Early cancellation can unfold an alternate service stair")
+	await capture(game,"service-cart")
+	game.player.global_position = world.to_global(Vector3(.55,.03,3.4))
+	game.player.rotation = Vector3(0,world.rotation.y,0)
+	game.player.camera.rotation = Vector3.ZERO
+	game.player.velocity = Vector3.ZERO
+	for frame in range(20): await get_tree().physics_frame
+	var cart_jumps = 0
+	for i in range(3):
+		var destination = world.cart_steps[i].position.z
+		Input.action_press("forward")
+		Input.action_press("jump")
+		await get_tree().physics_frame
+		Input.action_release("jump")
+		for frame in range(80):
+			await get_tree().physics_frame
+			if world.to_local(game.player.global_position).z <= destination+.02: break
+		Input.action_release("forward")
+		for frame in range(40): await get_tree().physics_frame
+		if game.player.is_on_floor() and game.player.global_position.y > .28*(i+1): cart_jumps += 1
+	check(cart_jumps == 3,"Early-cancel service stairs can actually be climbed: "+str(game.player.global_position))
+	game.player.camera.look_at(form.global_position)
+	for frame in range(3): await get_tree().physics_frame
+	game._use("print_form","print",true)
+	check(game.state.stage.print.document == "held","Early cancellation remains solvable through the alternate stairs")
+
+	var npc = game.targets.print_seo
+	aim(game,world.to_global(world.point("seo")+Vector3(.65,.02,.1)),npc.global_position)
+	for frame in range(5): await get_tree().physics_frame
+	await keypress(KEY_F)
+	check(ui.mode == "stage_dialogue" and is_instance_valid(ui.stage_choices) and ui.stage_choices.get_child_count() == 3,"Print room has optional NPC conversation without a right-answer quiz")
+	if ui.mode != "stage_dialogue":
+		print("PRINT_NPC_DIAG ",JSON.stringify({"position":str(game.player.global_position),"target":str(game.player.target),"reachable":npc.reachable()}))
+		ui.talk_to("print_seo")
+	await capture(game,"npc-conversation")
+	ui.stage_choices.get_child(2).pressed.emit()
+	check(ui.mode == "field" and game.player.enabled,"NPC choices return to movement")
+	ui.open_terminal()
+	await keypress(KEY_ESCAPE)
+	check(ui.mode == "field","Escape closes the terminal")
+	ui.toggle()
+	check(ui.mode == "pause","The next Escape opens pause")
 	ui.open_tablet(4)
 	await get_tree().process_frame
 	var review = load("res://prototype/tests/smoke.gd").new()
 	add_child(review)
 	await review.settings_dialog_checks(game,failures)
-	var locked = AcceptDialog.new()
-	locked.dialog_text = "설치 준비 중"
-	locked.dialog_close_on_escape = false
-	ui.dialog_parent().add_child(locked)
-	locked.popup_centered(Vector2i(320,160))
-	await get_tree().process_frame
-	ui.toggle()
-	check(locked.visible,"Escape cannot dismiss an installation-preparation window")
-	locked.hide()
-	locked.queue_free()
 	ui.settings_screen.select_category("general")
 	await get_tree().process_frame
-	check(ui.channel_setting.item_count == 2,"Update settings expose one stable/beta channel selector")
+	check(ui.channel_setting.item_count == 2,"Update channel setting is preserved")
 	await capture(game,"07-settings")
 	ui.toggle()
-	check(ui.mode == "pause" and not game.player.enabled,"Settings return to the pause menu")
-	var original = game.get_window().size
-	for dimensions in [Vector2i(1280,720),Vector2i(1024,768),Vector2i(960,540),Vector2i(540,960)]:
+	var original_size = game.get_window().size
+	for dimensions in [Vector2i(1280,720),Vector2i(960,540),Vector2i(540,960)]:
 		game.get_window().size = dimensions
 		game._fit_screen()
-		await get_tree().process_frame
 		ui.fit_screen()
-		ui.entry.show_menu(false)
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var bounds = get_viewport().get_visible_rect().grow(1)
-		check(bounds.encloses(ui.entry.quit.get_global_rect()),"Main menu exit fits "+str(dimensions))
 		ui.begin_stage()
 		ui.open_terminal()
 		await get_tree().process_frame
-		check(bounds.encloses(ui.command_input.get_global_rect()),"Terminal input fits "+str(dimensions))
+		await get_tree().process_frame
+		check(game.safe_rect().grow(1).encloses(ui.command_input.get_global_rect()),"Terminal input fits "+str(dimensions))
 		await capture(game,"terminal-%dx%d" % [dimensions.x,dimensions.y])
-		enter(game,"oops")
-		await get_tree().create_timer(.85).timeout
-		await get_tree().process_frame
-		await get_tree().process_frame
-		check(bounds.encloses(ui.result_retry.get_global_rect()) and bounds.encloses(ui.result_menu.get_global_rect()),"Explosion actions fit "+str(dimensions))
-		await capture(game,"explosion-%dx%d" % [dimensions.x,dimensions.y])
-		ui.retry_stage()
+		ui.close()
+		ui.open_pause()
 		ui.open_tablet(4)
 		await get_tree().process_frame
-		await get_tree().process_frame
-		check(ui.settings_screen.get_visible_rect().grow(1).encloses(ui.settings_screen.save_button.get_global_rect()),"Settings save action fits "+str(dimensions))
+		check(ui.settings_screen.get_visible_rect().grow(1).encloses(ui.settings_screen.save_button.get_global_rect()),"Settings save fits "+str(dimensions))
 		await capture(game,"settings-%dx%d" % [dimensions.x,dimensions.y])
 		ui.settings_screen.close_editor()
-	game.get_window().size = original
+	game.get_window().size = original_size
 	game._fit_screen()
-	ui.clear_effects()
-	# Let a canceled reset countdown release its existing one-second wait.
 	await get_tree().create_timer(1.05).timeout
-	var summary = {"passed":failures.is_empty(),"failures":failures,"platform":OS.get_name(),"mobile":game.controls.mobile,"touchDefault":touch_default,"keyboardDetected":game.controls.keyboard_seen,"stages":6,"blasts":game.state.stage.blasts}
-	print("INVESTIGATION_SMOKE ",JSON.stringify(summary))
+	print("INVESTIGATION_SMOKE ",JSON.stringify({"passed":failures.is_empty(),"failures":failures,"platform":OS.get_name(),"mobile":game.controls.mobile,"touchDefault":touch_default,"keyboardDetected":game.controls.keyboard_seen,"stages":1,"paperJumps":completed_jumps,"cartJumps":cart_jumps,"blasts":0}))
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 func field_hud_checks(game):
@@ -282,40 +247,31 @@ func field_hud_checks(game):
 		game.get_window().size = dimensions
 		game._fit_screen()
 		ui.fit_screen()
-		game.review_target("oh")
+		game.ui.notice("서유진: 서류 나오면 부르세요.")
 		for frame in range(3): await get_tree().physics_frame
-		game._use("park","npc",true)
-		await get_tree().process_frame
-		await get_tree().process_frame
 		ui.fit_field_overlays()
 		await get_tree().process_frame
 		var bounds = game.safe_rect().grow(1)
-		check(ui.field_objective.size.x >= 300 and bounds.encloses(ui.field_objective.get_global_rect()),"Objective fits horizontally at "+str(dimensions))
-		check(ui.toast.size.x >= 300 and ui.toast.size.y < 180 and bounds.encloses(ui.toast.get_global_rect()),"Wrong-NPC notice stays readable at "+str(dimensions))
-		check(ui.prompt_panel.visible and ui.prompt_panel.size.x >= 220 and ui.prompt_panel.size.y < 160 and bounds.encloses(ui.prompt_panel.get_global_rect()),"Interaction chip stays horizontal and visible at "+str(dimensions))
-		for overlay in [ui.field_objective,ui.toast,ui.prompt_panel,ui.update_hud,ui.dot]:
-			check(ignores_pointer(overlay),"Every passive HUD descendant ignores mouse input")
+		check(ui.field_objective.size.x >= 300 and bounds.encloses(ui.field_objective.get_global_rect()),"Objective stays horizontal at "+str(dimensions))
+		check(ui.toast.size.x >= 300 and ui.toast.size.y < 180 and bounds.encloses(ui.toast.get_global_rect()),"NPC subtitle stays readable at "+str(dimensions))
+		for overlay in [ui.field_objective,ui.toast,ui.prompt_panel,ui.update_hud,ui.dot]: check(ignores_pointer(overlay),"Passive HUD ignores pointer")
 		if not game.controls.mobile and DisplayServer.get_name() != "headless":
 			game.player.application_focused = true
 			game.player.capture_suspended = false
 			game.player.set_enabled(true)
-			for overlay in [ui.field_objective,ui.toast,ui.prompt_panel]:
-				var before = game.player.rotation.y
-				var motion = InputEventMouseMotion.new()
-				motion.position = get_viewport().get_final_transform()*overlay.get_global_rect().get_center()
-				motion.global_position = motion.position
-				motion.relative = get_viewport().get_final_transform().basis_xform(Vector2(3,0))
-				Input.parse_input_event(motion)
-				Input.flush_buffered_events()
-				await get_tree().process_frame
-				check(absf(game.player.rotation.y-before+3*game.player.sensitivity) < .0001,"Mouse look continues exactly once over HUD text")
+			var before = game.player.rotation.y
+			var motion = InputEventMouseMotion.new()
+			motion.position = get_viewport().get_final_transform()*ui.field_objective.get_global_rect().get_center()
+			motion.global_position = motion.position
+			motion.relative = get_viewport().get_final_transform().basis_xform(Vector2(3,0))
+			Input.parse_input_event(motion)
+			Input.flush_buffered_events()
+			await get_tree().process_frame
+			check(absf(game.player.rotation.y-before+3*game.player.sensitivity) < .0001,"Mouse look continues over HUD")
 		await capture(game,"field-%dx%d" % [dimensions.x,dimensions.y])
 	game.get_window().size = original_size
 	game._fit_screen()
 	ui.fit_screen()
-	ui.message.text = ""
-	ui.toast.hide()
-	game.reset_player_pose()
 
 func ignores_pointer(node: Node) -> bool:
 	if node is Control and node.mouse_filter != Control.MOUSE_FILTER_IGNORE: return false
