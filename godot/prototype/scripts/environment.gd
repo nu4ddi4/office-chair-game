@@ -215,13 +215,13 @@ func sync_stage(stage: Dictionary):
 	var signature = "stage:"+JSON.stringify(stage)
 	if signature == last_visual_state: return
 	last_visual_state = signature
-	var definition = stage_definitions[int(stage.index)-1]
+	var definition = stage_definitions[0]
 	for id in displays:
 		var display = displays[id]
 		var active = id == definition.device
 		var broken = active and stage.phase == "exploded"
 		display.canvas.heading = "NO SIGNAL" if broken else "PC-%02d / OFFICE OS" % stage.index if active else "사내 컴퓨터 관리"
-		display.canvas.rows = ["보증 기간 종료","담당자: 부재중","상태: 부품으로 전환"] if broken else [definition.title,"키보드 입력 대기","업무 처리 대기"] if active else ["오늘의 업무 6건","동료에게 인사를 합시다","퇴근까지 힘내세요"]
+		display.canvas.rows = ["보증 기간 종료","담당자: 부재중","상태: 부품으로 전환"] if broken else [definition.title,"키보드 입력 대기","업무 처리 대기"] if active else ["출력실 / PR-01","문서 출력 운영","퇴근까지 힘내세요"]
 		display.canvas.tone = Color(.95,.25,.1) if broken else GOOD
 		display.canvas.queue_redraw()
 		display.viewport.render_target_update_mode = SubViewport.UPDATE_ONCE

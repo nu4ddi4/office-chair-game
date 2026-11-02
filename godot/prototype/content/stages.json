@@ -1,99 +1,16 @@
 [
   {
-    "title": "일단 켜 보기",
-    "goal": "터미널의 상태를 확인하세요.",
-    "device": "server_console",
-    "help": "help          명령 목록\nstatus        상태 확인\nls            파일 목록\ncat <file>    파일 읽기",
+    "title": "한 장만 뽑아 주세요",
+    "goal": "퇴근 신청서를 한 장 출력하세요.",
+    "device": "print_console",
+    "help": "help             command list\nls               list files\ncat <file>       read file\nstatus           printer status\nqueue            print queue\nprint <file>     submit print job\npause <job>      pause job\nresume <job>     resume job\ncancel <job>     cancel job",
     "files": {
-      "welcome.txt": "신입사원용 PC\n담당자: 상태부터 확인해 주세요."
+      "clockout.form": "퇴근 신청서\n신청인: 신입사원\n결재: 미접수\n출력 매수: 1",
+      "notice.txt": "PR-01\n배출구 앞 적재 금지\n상부 트레이 점검일: 오늘",
+      "service.log": "17:58:11 tray_sensor=NO_ACK\n17:58:12 retry_delivery=ON\n17:58:13 operator_session=OPEN"
     },
     "outputs": {},
-    "solutions": {
-      "status": "POWER=ON\nDIAGNOSTICS=PASS\n업무 적응도: 전원을 켤 수 있음"
-    },
-    "clear": "당신은 전원을 켰습니다. 채용이 유지됩니다.",
+    "clear": "신청서 한 장을 회수했습니다.\n출력도 멈췄습니다.",
     "failure": ""
-  },
-  {
-    "title": "서류 찾기의 달인",
-    "goal": "오늘 마지막으로 출력한 서류를 찾아 여세요.",
-    "device": "project_pc",
-    "help": "help          명령 목록\nls            파일 목록\ncat <file>    파일 읽기",
-    "files": {
-      "print.log": "09:12  lunch.txt    COMPLETED\n09:48  memo.txt     COMPLETED\n09:31  budget.txt   COMPLETED",
-      "lunch.txt": "금일 점심: 미정\n결재 상태: 전원 반대",
-      "budget.txt": "소모품 예산: 300원\n희망 구매: 데이터센터",
-      "memo.txt": "인수인계 메모\n프린터 담당자는 서버실로 이동했습니다."
-    },
-    "outputs": {},
-    "solutions": {
-      "cat memo.txt": "인수인계 메모\n프린터 담당자는 서버실로 이동했습니다."
-    },
-    "clear": "종이를 읽었습니다. 이제 경력직입니다.",
-    "failure": ""
-  },
-  {
-    "title": "야근은 프린터가 한다",
-    "goal": "야근 신청서를 무한 출력하는 프로세스를 멈추세요.",
-    "device": "server_console",
-    "help": "help          명령 목록\nls            파일 목록\ncat <file>    파일 읽기\nps            프로세스 목록\nkill <pid>    프로세스 종료",
-    "files": {
-      "print.log": "16:02 pid=37 file=overtime-form copies=9999\n16:03 pid=21 file=printer-health copies=1\n16:04 pid=84 file=payroll copies=1"
-    },
-    "outputs": {
-      "ps": "PID  NAME\n21   printd\n37   office-bot\n84   finance-db"
-    },
-    "solutions": {
-      "kill 37": "PID=37\nSTATE=STOPPED\nPRINT_QUEUE=0"
-    },
-    "clear": "프린터는 퇴근했습니다. 당신은 아직입니다.",
-    "failure": "프린터보다 먼저 컴퓨터가 퇴근했습니다."
-  },
-  {
-    "title": "사무실 웰던",
-    "goal": "사무실 난방을 해당 구역의 기준 온도로 돌리세요.",
-    "device": "maintenance_terminal",
-    "help": "help             명령 목록\nls               파일 목록\ncat <file>       파일 읽기\nstatus           장치 상태\nset temp <value> 목표 온도 설정",
-    "files": {
-      "device.cfg": "model=WARMBOX-2\nzone=office\nsetpoint=180\nunit=C",
-      "profiles.txt": "zone       target_C\nkitchen    180\nserver     18\noffice     24"
-    },
-    "outputs": {
-      "status": "ZONE=office\nTEMPERATURE=180 C\nCARPET=MEDIUM_RARE"
-    },
-    "solutions": {
-      "set temp 24": "SETPOINT=24 C\nCARPET=NOT_FOOD"
-    },
-    "clear": "카펫을 가구로 되돌렸습니다.",
-    "failure": "수리는 실패했고 노릇함은 성공했습니다."
-  },
-  {
-    "title": "결재는 입으로",
-    "goal": "보안팀장 오세진에게 퇴근 결재를 받으세요.",
-    "device": "control_console",
-    "help": "",
-    "files": {},
-    "outputs": {},
-    "solutions": {},
-    "clear": "결재는 났습니다. 마지막 컴퓨터만 끄면 됩니다.",
-    "failure": "결재가 반려됐습니다. 컴퓨터도 사표를 냈습니다.",
-    "npc": "oh",
-    "dialogue": "오세진: 퇴근 신청 세 건이 왔네요.\n김 대리: 25시 70분에 퇴근\n이 사원: 오늘 업무 완료, 장비 전원은 확인 중\n박 과장: 출근한 적 없음\n\n누구 신청부터 접수할까요?",
-    "choices": [
-      "김 대리 건부터 처리하죠.",
-      "이 사원 건부터 접수해 주세요.",
-      "출근 안 한 박 과장님이 급합니다."
-    ]
-  },
-  {
-    "title": "저 컴퓨터를 꺼야 해",
-    "goal": "옥상의 발판을 건너 마지막 PC의 전원 스위치를 누르세요.",
-    "device": "shutdown_pc",
-    "help": "",
-    "files": {},
-    "outputs": {},
-    "solutions": {},
-    "clear": "POWER OFF. 이제 정말 퇴근입니다.",
-    "failure": "발판은 멀쩡합니다. 사원의 체면만 떨어졌습니다."
   }
 ]

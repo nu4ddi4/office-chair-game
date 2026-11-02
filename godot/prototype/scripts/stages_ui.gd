@@ -9,11 +9,6 @@ var result_retry: Button
 var result_menu: Button
 var stage_picker: PanelContainer
 var picks: VBoxContainer
-var flash: ColorRect
-var burst_count = 0
-var effects: Node3D
-var shock: Tween
-var flights: Array[Tween] = []
 var current_attempt = ""
 var stage_choices: VBoxContainer
 var stage_scroll: ScrollContainer
@@ -63,7 +58,7 @@ func setup(controller: InvestigationPrototype):
 	build_settings_references()
 	super._build_terminal()
 	command_input.keep_editing_on_text_submit = true
-	terminal_sidebar.get_child(0).text = "이번 PC"
+	terminal_sidebar.get_child(0).text = "출력실"
 	result_panel = panel(.12,.55,.88,.95)
 	var result_box = VBoxContainer.new()
 	result_box.add_theme_constant_override("separation",12)
@@ -88,11 +83,6 @@ func setup(controller: InvestigationPrototype):
 	button(selector,"메뉴",open_pause)
 	entry = TerminalStageEntry.new()
 	entry.build(self)
-	flash = ColorRect.new()
-	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	flash.color = Color(1,.5,.1,0)
-	root.add_child(flash)
-	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for overlay in [field_objective,prompt_panel,toast,update_hud,dot]: ignore_pointer(overlay)
 	fit_screen()
 	refresh()
@@ -121,7 +111,12 @@ func build_settings_references():
 func stage_definition() -> Dictionary: return game.content.stages[int(game.state.stage.index)-1]
 
 func guide_info() -> Dictionary:
-	return {"title":"STAGE %02d · %s" % [game.state.stage.index,stage_definition().title],"text":stage_definition().goal,"target":stage_definition().get("npc",stage_definition().device)}
+	var p = game.state.stage.print
+	var goal = "퇴근 신청서를 한 장 출력하세요."
+	if p.document == "held": goal = "신청서를 결재 서류 접수함에 놓으세요."
+	elif p.document == "delivered": goal = "접수함에서 업무 완료를 확인하세요."
+	elif p.job != "none": goal = "신청서를 회수하고 출력을 멈추세요."
+	return {"title":"STAGE 01 · "+stage_definition().title,"text":goal,"target":""}
 
 func objective_info() -> Dictionary: return guide_info()
 func investigation_assigned() -> bool: return false
@@ -130,9 +125,9 @@ func sync_memo(): pass
 func refresh():
 	if terminal_objective == null: return
 	var task = guide_info()
-	source.text = "PC-%02d / OFFICE OS" % game.state.stage.index
-	terminal_objective.text = task.title+"\n\n"+task.text
-	terminal_compact_objective.text = task.title+"\n"+task.text
+	source.text = "PR-01 / LOCAL"
+	terminal_objective.text = task.text
+	terminal_compact_objective.text = task.text
 	hud.text = task.title
 	guide.text = task.text
 	fit_field_overlays.call_deferred()
@@ -204,7 +199,7 @@ func show_terminal():
 	command_input.text = terminal_drafts.get(game.context,"")
 	history_index = command_history.get(game.context,[]).size()
 	history_draft = command_input.text
-	if not terminal_buffers.has(game.context): terminal_buffers[game.context] = [{"kind":"banner","text":"OFFICE OS / PC-%02d\nType help for commands.\n" % game.state.stage.index}]
+	if not terminal_buffers.has(game.context): terminal_buffers[game.context] = [{"kind":"banner","text":"PR-01\nREADY\n"}]
 	refresh()
 	render_terminal()
 	if not game.controls.mobile: command_input.grab_focus()
@@ -246,6 +241,7 @@ func open_stage_picker():
 	_show("stages",stage_picker)
 
 func reset_session():
+	game.stage_world.key = ""
 	if is_instance_valid(settings_screen): settings_screen.close_editor(true)
 	clear_effects()
 	terminal_buffers.clear()
@@ -275,111 +271,37 @@ func execute_command():
 
 func available_commands() -> Array:
 	var rows = []
-	for command in ["help","ls","pwd","clear","history","exit"]+stage_definition().outputs.keys(): rows.append({"text":command})
-	for filename in stage_definition().files: rows.append({"text":"cat "+filename})
-	# Completion covers visible files and read-only commands; action arguments
-	# remain the player's input, including the risky stages.
+	for command in ["help","ls","pwd","status","queue","clear","history","exit","pause ","resume ","cancel "]: rows.append({"text":command})
+	for filename in stage_definition().files:
+		rows.append({"text":"cat "+filename})
+		if filename.ends_with(".form"): rows.append({"text":"print "+filename})
 	return rows
 
 func command_result(result: Dictionary):
-	if result.code in ["STAGE_CLEAR","STAGE_EXPLODED"]:
-		game.save_now()
-		show_result()
-		if result.code == "STAGE_EXPLODED":
-			explode()
-			result_panel.hide()
-			reveal_failure(game.state.stage.index,game.state.stage.attempt)
-
-func reveal_failure(index: int, attempt: int):
-	await get_tree().create_timer(.8).timeout
-	if game.state.stage.index == index and game.state.stage.attempt == attempt and game.state.stage.phase == "exploded" and mode == "exploded":
-		result_panel.show()
+	if result.code == "STAGE_CLEAR": show_result()
 
 func show_result():
-	var phase = game.state.stage.phase
-	var failed = phase == "exploded"
-	result_title.text = "펑." if failed else "퇴근 성공" if phase == "complete" else "업무 완료"
-	result_title.add_theme_color_override("font_color",InvestigationTheme.DANGER if failed else InvestigationTheme.ACCENT)
-	result_body.text = stage_definition().failure if failed else "처리한 업무: 6건\n터뜨린 PC: %d대\n내일은 계산기를 드립니다." % game.state.stage.blasts if phase == "complete" else stage_definition().clear
-	result_retry.visible = failed
-	result_next.visible = phase == "clear"
-	result_next.text = "퇴근하기" if game.state.stage.index == TerminalStagesEngine.COUNT else "다음 업무"
-	_show("exploded" if failed else "result",result_panel)
-	(result_retry if failed else result_next if phase == "clear" else result_menu).grab_focus()
+	var complete = game.state.stage.phase == "complete"
+	result_title.text = "신청서 한 장, 접수 완료" if complete else "출력 업무 완료"
+	result_title.add_theme_color_override("font_color",InvestigationTheme.ACCENT)
+	result_body.text = "서류도 챙겼고, 프린터도 멈췄습니다.\n오늘의 출력 업무를 마쳤습니다." if complete else stage_definition().clear
+	result_retry.visible = true
+	result_retry.text = "다시 해 보기"
+	result_next.visible = not complete
+	result_next.text = "마무리"
+	_show("result",result_panel)
+	(result_retry if complete else result_next).grab_focus()
 
 func retry_stage():
 	if not game.commit_stage_transition({"type":"stage.retry"}): return
+	game.stage_world.key = ""
 	begin_stage()
 
 func next_stage():
 	if not game.commit_stage_transition({"type":"stage.next"}): return
-	if game.state.stage.phase == "complete": show_result()
-	else: begin_stage()
+	show_result()
 
-func explode():
-	clear_effects()
-	burst_count += 1
-	effects = Node3D.new()
-	game.add_child(effects)
-	effects.global_position = game.targets[game.context].global_position
-	var debris = BoxMesh.new()
-	debris.size = Vector3(.18,.18,.18)
-	var material = StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color(1,.45,.05)
-	debris.material = material
-	for i in range(12):
-		var piece = MeshInstance3D.new()
-		piece.mesh = debris
-		effects.add_child(piece)
-		var flight = create_tween().set_parallel()
-		flights.append(flight)
-		var direction = Vector3(sin(i*2.4),.5+float(i%3)*.3,cos(i*2.4))
-		flight.tween_property(piece,"position",direction*1.7,.65).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		flight.tween_property(piece,"rotation",direction*5,.65)
-		flight.tween_property(piece,"scale",Vector3.ZERO,.65)
-		flight.finished.connect(piece.queue_free)
-	flash.color = Color(1,.45,.05,.75)
-	shock = create_tween()
-	shock.tween_property(flash,"color:a",0.0,.22)
-	game.stage_world.break_computer(game.context)
-	game.player.camera.h_offset = .045
-	shock.tween_property(game.player.camera,"h_offset",-.035,.05)
-	shock.tween_property(game.player.camera,"h_offset",0.0,.1)
-	play_boom()
-
-func play_boom():
-	var sample = PackedByteArray()
-	var count = 11025
-	sample.resize(count*2)
-	var rng = RandomNumberGenerator.new()
-	rng.seed = 718
-	for i in range(count):
-		var envelope = pow(1.0-float(i)/count,2)
-		var value = (rng.randf_range(-1,1)*.65+sin(float(i)*.04)*.35)*envelope
-		sample.encode_s16(i*2,int(value*20000))
-	var sound = AudioStreamWAV.new()
-	sound.format = AudioStreamWAV.FORMAT_16_BITS
-	sound.mix_rate = 22050
-	sound.data = sample
-	var player = AudioStreamPlayer.new()
-	player.stream = sound
-	player.bus = "SFX"
-	player.volume_db = -8
-	game.add_child(player)
-	player.finished.connect(player.queue_free)
-	player.play()
-
-func clear_effects():
-	for flight in flights:
-		if flight != null and flight.is_valid(): flight.kill()
-	flights.clear()
-	if is_instance_valid(effects): effects.queue_free()
-	if shock != null: shock.kill()
-	if flash != null: flash.color.a = 0
-	game.stage_world.restore_view()
-	game.player.camera.h_offset = 0
-	game.player.camera.v_offset = 0
+func clear_effects(): pass
 
 func fit_screen():
 	if root == null or terminal_sidebar == null: return
@@ -415,10 +337,6 @@ func _process(_delta):
 	terminal_panel.anchor_bottom = clampf(.94-float(keyboard)/maxf(1,DisplayServer.window_get_size().y),.3,.94)
 
 func talk_to(id: String):
-	var definition = stage_definition()
-	if definition.get("npc","") != id:
-		notice("지금은 내 담당이 아닌데? 담당자를 찾아봐.")
-		return
 	clear(modal)
 	stage_scroll = ScrollContainer.new()
 	stage_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -427,19 +345,20 @@ func talk_to(id: String):
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation",18)
 	stage_scroll.add_child(box)
-	heading(box,game.content.case.npcs[id].name)
-	label(box,definition.dialogue)
+	heading(box,"서유진 · 정비 담당" if id == "print_seo" else game.content.case.npcs[id].name)
+	var p = game.state.stage.print
+	label(box,"서류 나오면 부르세요." if p.job == "none" else "한 장은 한 장인데, 배송을 여러 번 하네요." if p.document == "tray" else "접수함에 두시면 됩니다.")
 	stage_choices = VBoxContainer.new()
 	stage_choices.add_theme_constant_override("separation",10)
 	box.add_child(stage_choices)
-	for i in range(definition.choices.size()):
-		var choice = i
-		var option = button(stage_choices,definition.choices[i],func():
-			var result = game.dispatch({"type":"stage.talk","payload":{"choice":choice}})
-			command_result(result))
+	for line in ["상부 트레이가 꽤 높네요.","의자가 움직이던데요.","알겠습니다."]:
+		var selected = line
+		var option = button(stage_choices,line,func():
+			enter_field()
+			if selected.begins_with("상부"): notice("서유진: 점검 발판차도 여기 세워 놨어요.")
+			elif selected.begins_with("의자"): notice("서유진: 바퀴는 아직 멀쩡하네요."))
 		option.custom_minimum_size.y = 48
 		option.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	button(box,"잠깐만, 다시 생각할게요",enter_field)
 	_show("stage_dialogue",modal)
 
 func ignore_pointer(node: Node):
