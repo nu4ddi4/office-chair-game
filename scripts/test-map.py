@@ -35,13 +35,13 @@ def main():
     run(["node", "scripts/godot-asset-test.mjs"])
     run([args.godot, "--headless", "--path", str(ROOT / "godot"), "--editor", "--import"])
     command = [args.godot, "--path", str(ROOT / "godot"), "--rendering-method", "gl_compatibility",
-               "--audio-driver", "Dummy"]
+               "--audio-driver", "Dummy", "--resolution", "960x540"]
     if not args.rendered:
         command.append("--headless")
     command += ["--script", "res://tests/map_smoke.gd", "--", "--capture-dir", str(directory)]
     if args.rendered:
         command.append("--rendered")
-    output = run(command)
+    output = run(command, timeout=360)
     reports = [json.loads(line.split("MAP_SMOKE ", 1)[1]) for line in output.splitlines() if line.startswith("MAP_SMOKE ")]
     if len(reports) != 1 or reports[0].get("passed") is not True:
         raise RuntimeError("The map smoke test did not finish successfully.")
