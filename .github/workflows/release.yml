@@ -1,0 +1,67 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: New product tag matching godot/project.godot
+        required: true
+        default: OfficeChairChaos-v0.1.0
+      source_run_id:
+        description: Successful Test run containing the verified Windows artifact
+        required: true
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+      - name: Verify source run and unchanged game inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN_ID" > "$RUNNER_TEMP/source-run.json"
+          source_sha=$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["name"]=="Test" and r["conclusion"]=="success" and r["status"]=="completed"; print(r["head_sha"])' "$RUNNER_TEMP/source-run.json")
+          git merge-base --is-ancestor "$source_sha" "$GITHUB_SHA"
+          git diff --exit-code "$source_sha" "$GITHUB_SHA" -- godot scripts/build-game.py scripts/build-chaos-office.py scripts/test-game.py scripts/check-chaos-assets.py
+          if git rev-parse --verify "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$GITHUB_SHA"
+          fi
+      - name: Check release packaging
+        run: python3 -m unittest discover -s tests/release
+      - uses: actions/download-artifact@v4
+        with:
+          name: OfficeChairChaos-Windows-x64
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          path: verified-build
+      - name: Check hashes and prepare portable download
+        run: python3 scripts/prepare-release.py --source verified-build --output publish --tag "$RELEASE_TAG" --run-id "$SOURCE_RUN_ID" --commit "$GITHUB_SHA"
+      - name: Create draft and publish verified assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --json isDraft,targetCommitish > "$RUNNER_TEMP/existing-release.json" 2>/dev/null; then
+            python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["isDraft"] and r["targetCommitish"]==sys.argv[2], "Existing published release or different target must be preserved"' "$RUNNER_TEMP/existing-release.json" "$GITHUB_SHA"
+            gh release upload "$RELEASE_TAG" publish/assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" publish/assets/* --draft --target "$GITHUB_SHA" --title "김 대리, 나 좀 밀어봐 ${RELEASE_TAG#OfficeChairChaos-v}" --notes-file publish/notes.md
+          fi
+          gh release view "$RELEASE_TAG" --json assets > "$RUNNER_TEMP/uploaded-assets.json"
+          python3 -c 'import json,pathlib,sys; expected={p.name:p.stat().st_size for p in pathlib.Path("publish/assets").iterdir()}; actual={a["name"]:a["size"] for a in json.load(open(sys.argv[1]))["assets"]}; assert actual==expected, "Incomplete release upload"' "$RUNNER_TEMP/uploaded-assets.json"
+          gh release edit "$RELEASE_TAG" --draft=false --latest
