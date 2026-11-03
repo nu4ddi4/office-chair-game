@@ -86,7 +86,7 @@ def main():
     parser.add_argument('--commit', required=True)
     parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY', ''))
     args = parser.parse_args()
-    version = re.search(r'^config/version="([^"]+)"', (ROOT / 'godot/project.godot').read_text(), re.M).group(1)
+    version = re.search(r'^config/version="([^"]+)"', (ROOT / 'godot/project.godot').read_text(encoding='utf-8'), re.M).group(1)
     highlights_path = ROOT / "docs/releases" / f"{version}.md"
     highlights = highlights_path.read_text(encoding="utf-8") if highlights_path.exists() else ""
     print(prepare(args.source, args.output, version, args.tag, args.run_id, args.commit, args.repository, highlights))
