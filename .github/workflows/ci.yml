@@ -9,33 +9,69 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: map-test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+  group: chair-test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 jobs:
   test:
-    # Preserve the protected main branch's required check name.
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: false
-      - name: Fetch the retained office map
-        run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb" --exclude=""
+      - name: Fetch runtime offices
+        run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb,godot/assets/models/Office_Chaos.glb" --exclude=""
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.7.2
           use-dotnet: false
           include-templates: false
-      - name: Lint the map workflow
+      - name: Lint workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
-      - name: Check geometry, movement, doors, pause and rendered input
-        run: xvfb-run -a -s "-screen 0 1600x1200x24" python3 scripts/test-map.py --godot godot --rendered
-      - name: Retain map review screens and results
+      - name: Rules, saves, real physics and rendered review
+        run: xvfb-run -a -s "-screen 0 1600x900x24" python3 scripts/test-game.py --godot godot --rendered
+      - name: Retained source map regression
+        run: python3 scripts/test-map.py --godot godot
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: office-map-review-${{ github.run_id }}
-          path: map-results/
+          name: office-chair-review-${{ github.run_id }}
+          path: chaos-results/
           if-no-files-found: ignore
+          retention-days: 14
+  windows:
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Fetch runtime offices for import
+        run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb,godot/assets/models/Office_Chaos.glb" --exclude=""
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+      - name: Locate console engine
+        shell: pwsh
+        run: |
+          $console = Join-Path $env:USERPROFILE 'godot/Godot_v4.7.2-stable_win64_console.exe'
+          if (-not (Test-Path $console)) {
+            $archive = Join-Path $env:RUNNER_TEMP 'godot.zip'
+            Invoke-WebRequest 'https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip' -OutFile $archive
+            Expand-Archive $archive (Join-Path $env:USERPROFILE 'godot') -Force
+          }
+          "CHAOS_GODOT=$console" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Import and verify portable EXE
+        shell: pwsh
+        run: |
+          & $env:CHAOS_GODOT --headless --path godot --editor --import --quit
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/build-game.py --godot "$env:CHAOS_GODOT" --verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OfficeChairChaos-Windows-x64
+          path: chaos-dist/
           retention-days: 14
