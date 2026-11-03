@@ -16,7 +16,7 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prepare(source, output, version, tag, run_id, commit, repository):
+def prepare(source, output, version, tag, run_id, commit, repository, highlights=""):
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("Expected the current GitHub repository owner/name")
     if not re.fullmatch(r'\d+\.\d+\.\d+', version) or tag != f'OfficeChairChaos-v{version}':
@@ -49,13 +49,16 @@ def prepare(source, output, version, tag, run_id, commit, repository):
 
 풍선인형처럼 휘청거리는 직원이 의자에 앉은 부장님을 운반하는 PC용 물리 코미디 게임입니다.
 
+{highlights}
+
 ## 다운로드와 실행
 
 **OfficeChairChaos-{version}-Windows-x64.zip**을 받아 압축을 풀고 `OfficeChairChaos.exe`를 실행하세요. Godot 설치는 필요하지 않습니다. 크레딧과 라이선스 파일은 함께 보관해 주세요.
 
-- WASD: 이동 / 마우스: 시점
+- WASD: 자유 이동 / 마우스: 시점
+- 의자 뒤에서 E: 양손 손잡이 잡기 / 밀기 중 W/S: 전후진, A/D: 조향
 - 마우스 좌·우 클릭: 양손 잡기·놓기
-- Shift: 빠르게 밀기 / Space: 버티기·일어나기
+- Shift: 달리기·부스트 / Space: 제동·버티기·일어나기
 - E: 문·커피·의자·부장님 상호작용
 - R 길게: 체크포인트 복구 / Esc: 일시정지
 
@@ -67,7 +70,7 @@ def prepare(source, output, version, tag, run_id, commit, repository):
 
 Linux 검사와 실제 Windows EXE 실행을 통과한 [빌드](https://github.com/{repository}/actions/runs/{run_id})를 재사용했습니다. 릴리스 대상 main 커밋: `{commit}`.
 
-Windows x64용 첫 버전입니다. 플레이 분량·밸런스·기준 GPU 성능은 추가 실플레이 확인 대상입니다. 기존 SecurityLab 릴리스와 저장·자동 업데이트는 사용하지 않습니다.
+Windows x64용 버전입니다. 플레이 분량·밸런스·기준 GPU 성능은 추가 실플레이 확인 대상입니다. 기존 SecurityLab 릴리스와 저장·자동 업데이트는 사용하지 않습니다.
 '''
     (output / 'notes.md').write_text(notes, encoding='utf-8')
     return archive
@@ -83,7 +86,9 @@ def main():
     parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY', ''))
     args = parser.parse_args()
     version = re.search(r'^config/version="([^"]+)"', (ROOT / 'godot/project.godot').read_text(), re.M).group(1)
-    print(prepare(args.source, args.output, version, args.tag, args.run_id, args.commit, args.repository))
+    highlights_path = ROOT / "docs/releases" / f"{version}.md"
+    highlights = highlights_path.read_text(encoding="utf-8") if highlights_path.exists() else ""
+    print(prepare(args.source, args.output, version, args.tag, args.run_id, args.commit, args.repository, highlights))
 
 
 if __name__ == '__main__':

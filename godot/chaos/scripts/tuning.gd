@@ -1,13 +1,32 @@
 class_name ChaosTuning
 extends Resource
 
-const WALK_SPEED = 2.1
-const RUN_SPEED = 3.6
+const WALK_SPEED = 2.7
+const RUN_SPEED = 4.8
 const BRACE_SPEED = 0.8
+const PUSH_SPEED = 3.6
+const PUSH_BOOST_SPEED = 6.8
+const PUSH_REVERSE_SPEED = 1.8
+const PUSH_FORCE = 380.0
+const BOOST_FORCE = 640.0
+const BRAKE_FORCE = 700.0
+const PUSH_STEER_RATE = 1.35
+const BOOST_STEER_RATE = 1.05
+const HANDLE_REACH = 1.15
+const PUSH_BREAK_DISTANCE = 1.9
+const PUSH_FOLLOW_DISTANCE = 1.0
 const REACH = 0.8
 const BREAK_DISTANCE = 1.45
-const FALL_ANGLE = 65.0
-const FALL_DELAY = 0.35
+const FALL_ANGLE = 80.0
+const FALL_DELAY = 0.65
+const SEAT_SIDE_ACCEL = 3.4
+const SEAT_BRAKE_ACCEL = 4.5
+const SEAT_RISK_LIMIT = 0.75
+const SEAT_COLLISION_DELTA = 1.5
+const COFFEE_ACCEL_THRESHOLD = 2.0
+const COFFEE_ACCEL_SPILL = 2.2
+const COFFEE_TILT_THRESHOLD = 0.28
+const COFFEE_TILT_SPILL = 45.0
 const PARK_SPEED = 0.25
 const PARK_HOLD = 1.5
 const ACTIVE_BODY_BUDGET = 64

@@ -17,6 +17,7 @@ var audio: ChaosAudio
 var ui: ChaosUI
 var yaw = 0.0
 var pitch = .36
+var look_idle = 0.0
 var reset_hold = 0.0
 var distance_timer = 0.0
 var escaping = false
@@ -126,6 +127,7 @@ func _restore_checkpoint():
 	office.hazards = run.mission.get("hazards",false)
 	yaw = facing; pitch = .36; camera_target = player.center()+Vector3(0,.5,0); _update_camera(1)
 	reset_hold = 0; previous_chair_velocity = Vector3.ZERO; impact_cooldown = 1; _update_goal()
+	look_idle = 0
 
 func retry():
 	if run==null: return
@@ -146,10 +148,7 @@ func _physics_process(delta):
 	if not ready_for_play or ui.mode!="field" or get_tree().paused or run==null: return
 	var axes = Input.get_vector("chaos_left","chaos_right","chaos_forward","chaos_back")
 	player.bracing = Input.is_action_pressed("chaos_brace")
-	var speed = ChaosTuning.BRACE_SPEED if player.bracing else ChaosTuning.RUN_SPEED if Input.is_action_pressed("chaos_sprint") else ChaosTuning.WALK_SPEED
-	player.desired_velocity = Basis(Vector3.UP,yaw)*Vector3(axes.x,0,axes.y)*speed
-	if axes.length()>.05: player.facing = lerp_angle(player.facing,yaw,1-exp(-delta*6))
-	chair.braked = player.bracing and (player.grips[0]==chair or player.grips[1]==chair)
+	_update_locomotion(delta,axes)
 	office.apply_hazards(player,chair); office.apply_hazards(boss,chair)
 	if escaping:
 		if player.center().distance_to(exit_point+Vector3(0,.92,0))<1.8: _finish()
@@ -174,6 +173,31 @@ func _physics_process(delta):
 			var passed = boss.seated and not player.fallen and player.center().y>.65 and office.detailed
 			print("CHAOS_PACKAGE_SMOKE ",JSON.stringify({"passed":passed}))
 			get_tree().quit(0 if passed else 1)
+
+func _update_locomotion(delta: float, axes: Vector2):
+	var both_handles = player.grips[0]==chair and player.grips[1]==chair
+	if not both_handles or player.fallen or chair.global_basis.y.dot(Vector3.UP)<.6:
+		player.pushing = false
+	elif not player.pushing and player.at_chair_back():
+		player.pushing = true
+		chair.drive_heading = chair.rotation.y
+	chair.driving = player.pushing
+	chair.boosting = false
+	if player.pushing:
+		var throttle = -Input.get_axis("chaos_forward","chaos_back")
+		var steer = Input.get_axis("chaos_left","chaos_right")
+		chair.drive(delta,throttle,steer,Input.is_action_pressed("chaos_sprint"),player.bracing)
+		var rear = chair.global_basis*Vector3(0,0,ChaosTuning.PUSH_FOLLOW_DISTANCE)
+		var error = chair.global_position+rear-player.center(); error.y = 0
+		var following = chair.linear_velocity+chair.angular_velocity.cross(rear)+error*4.5
+		player.desired_velocity = Vector3(following.x,0,following.z).limit_length(10)
+		player.facing = lerp_angle(player.facing,chair.rotation.y,1-exp(-delta*12))
+		if look_idle<=0: yaw = lerp_angle(yaw,chair.rotation.y,1-exp(-delta*3))
+	else:
+		var speed = ChaosTuning.BRACE_SPEED if player.bracing else ChaosTuning.RUN_SPEED if Input.is_action_pressed("chaos_sprint") else ChaosTuning.WALK_SPEED
+		player.desired_velocity = Basis(Vector3.UP,yaw)*Vector3(axes.x,0,axes.y)*speed
+		if axes.length()>.05: player.facing = lerp_angle(player.facing,yaw,1-exp(-delta*6))
+		chair.braked = player.bracing and (player.grips[0]==chair or player.grips[1]==chair)
 
 func _handle_progress(event: String):
 	if event.is_empty(): return
@@ -216,6 +240,7 @@ func _unhandled_input(event):
 		get_viewport().set_input_as_handled(); return
 	if ui.mode!="field": return
 	if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
+		look_idle = 2.5
 		yaw-=event.relative.x*float(store.data.settings.sensitivity)
 		pitch=clampf(pitch+event.relative.y*float(store.data.settings.sensitivity),-.20,.85)
 	if event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_LEFT,MOUSE_BUTTON_RIGHT]:
@@ -226,6 +251,9 @@ func _unhandled_input(event):
 
 func _process(delta):
 	if not ready_for_play or ui.mode!="field": return
+	look_idle = maxf(0,look_idle-delta)
+	var speed_fov = clampf(chair.linear_velocity.length()/ChaosTuning.PUSH_BOOST_SPEED,0,1)*8 if player.pushing else 0.0
+	camera.fov = lerpf(camera.fov,float(store.data.settings.fov)+speed_fov,1-exp(-delta*4))
 	_update_camera(delta); shake=maxf(0,shake-delta*.25)
 
 func _update_camera(delta):
@@ -262,6 +290,8 @@ func context() -> Dictionary:
 		var d=point.distance_to(player.center())
 		if d<distance and _visible(point,door.leaf): nearest=door; distance=d
 	if nearest!=null: return {"kind":"door","text":"문 밀기","target":nearest}
+	if player.pushing: return {"kind":"release","text":"의자 놓기"}
+	if player.can_grab_handles(): return {"kind":"push","text":"손잡이 잡고 앞으로 밀기"}
 	return {}
 
 func context_text() -> String:
@@ -274,6 +304,9 @@ func interact():
 	var action=context()
 	if action.is_empty(): return
 	match action.kind:
+		"push":
+			if player.grab_handles(): audio.play("grip",.6)
+		"release": player.release_all()
 		"coffee":
 			coffee.amount=100; coffee.grace=1; run.refilled=true
 			checkpoint_state.coffee=100; checkpoint_state.refilled=true; persist_checkpoint(); ui.say("가득. 아주 가득.")

@@ -28,6 +28,10 @@ var slippery = false
 var gesture = ""
 var gesture_time = 0.0
 var seat_grace = 0.0
+var pushing = false
+var seat_risk = 0.0
+var seat_acceleration = Vector3.ZERO
+var previous_seat_velocity = Vector3.ZERO
 
 func build(at: Vector3, is_boss = false, yaw = 0.0):
 	boss = is_boss
@@ -80,6 +84,10 @@ func _part(key: String, at: Vector3, radius: float, height: float, weight: float
 	body.linear_damp = .15
 	body.angular_damp = .6
 	body.can_sleep = boss
+	if boss:
+		var contact = PhysicsMaterial.new()
+		contact.friction = .28; contact.rough = true
+		body.physics_material_override = contact
 	var shape = CollisionShape3D.new()
 	var capsule = CapsuleShape3D.new()
 	capsule.radius = radius
@@ -114,6 +122,7 @@ func reset_pose(origin: Vector3, yaw: float, sitting: bool):
 	fallen = false
 	fall_time = 0
 	phase = 0
+	lean = 0; gesture = ""; gesture_time = 0
 	for key in bodies:
 		var p: Vector3 = offsets[key]
 		var angle = 0.0
@@ -133,6 +142,7 @@ func reset_pose(origin: Vector3, yaw: float, sitting: bool):
 		body.sleeping = false
 		body.reset_physics_interpolation()
 	desired_velocity = Vector3.ZERO
+	pushing = false
 	seat_grace = 1.2
 
 func sit(on_chair: RigidBody3D):
@@ -146,6 +156,9 @@ func sit(on_chair: RigidBody3D):
 	seat_joint.node_a = seat_joint.get_path_to(chair)
 	seat_joint.node_b = seat_joint.get_path_to(bodies.pelvis)
 	seated = true
+	seat_risk = 0; seat_acceleration = Vector3.ZERO
+	previous_seat_velocity = chair.linear_velocity
+	for body in bodies.values(): body.remove_from_group("chaos_grabbable")
 
 func detach_seat(announce = true):
 	if is_instance_valid(seat_joint):
@@ -155,7 +168,29 @@ func detach_seat(announce = true):
 		for body in bodies.values(): body.remove_collision_exception_with(chair)
 	var was = seated
 	seated = false
+	seat_risk = 0
+	for body in bodies.values():
+		if boss and not body.is_in_group("chaos_grabbable"): body.add_to_group("chaos_grabbable")
 	if was and announce: fell.emit()
+
+func _seat_dynamics(delta: float):
+	var velocity_change = chair.linear_velocity-previous_seat_velocity
+	previous_seat_velocity = chair.linear_velocity
+	seat_acceleration = seat_acceleration.lerp(velocity_change/maxf(delta,.001),1-exp(-delta/0.10))
+	if seat_grace>0: return
+	var local_accel = chair.global_basis.inverse()*seat_acceleration
+	var angle = rad_to_deg(acos(clampf(chair.global_basis.y.dot(Vector3.UP),-1,1)))
+	var turn_load = Vector2(chair.linear_velocity.x,chair.linear_velocity.z).length()*absf(chair.angular_velocity.y)
+	var stress = maxf(0,maxf(absf(local_accel.x),turn_load)-ChaosTuning.SEAT_SIDE_ACCEL)
+	stress += maxf(0,local_accel.z-ChaosTuning.SEAT_BRAKE_ACCEL)
+	stress += maxf(0,angle-30)*.12
+	seat_risk = clampf(seat_risk+(stress if stress>.05 else -2.0)*delta,0,1.5)
+	var impact = velocity_change.length()>ChaosTuning.SEAT_COLLISION_DELTA and (chair.linear_velocity-velocity_change).length()>2.0
+	if impact or seat_risk>ChaosTuning.SEAT_RISK_LIMIT or angle>58:
+		var outward = chair.global_basis.x*signf(chair.angular_velocity.y)*minf(turn_load*.22,2)
+		var throw_velocity = -seat_acceleration.limit_length(12)*.16+outward+Vector3.UP*1.3
+		detach_seat()
+		for body in bodies.values(): body.apply_central_impulse(throw_velocity*body.mass)
 
 func _physics_process(delta):
 	if not enabled or bodies.is_empty(): return
@@ -164,13 +199,12 @@ func _physics_process(delta):
 	if gesture_time<=0: gesture = ""
 	var pelvis: RigidBody3D = bodies.pelvis
 	var torso: RigidBody3D = bodies.torso
-	phase += delta * (8.0 if desired_velocity.length() > .15 else 1.0)
+	phase += delta * (8.0+minf(desired_velocity.length(),8)*.8 if desired_velocity.length() > .15 else 1.0)
 	if boss:
 		if seated and is_instance_valid(chair):
 			facing = chair.rotation.y
-			if seat_grace <= 0 and (chair.global_basis.y.dot(Vector3.UP)<.40 or pelvis.global_position.distance_to(chair.global_position+chair.global_basis*Vector3(0,.84,0))>.65):
-				detach_seat()
-			else: _pose(true,delta)
+			_seat_dynamics(delta)
+			if seated: _pose(true,delta)
 		return
 	var ray = PhysicsRayQueryParameters3D.create(pelvis.global_position,pelvis.global_position-Vector3(0,1.5,0),ChaosTuning.FLOOR)
 	var ground = get_world_3d().direct_space_state.intersect_ray(ray)
@@ -179,14 +213,14 @@ func _physics_process(delta):
 	fall_time = fall_time+delta if tilt > ChaosTuning.FALL_ANGLE else 0.0
 	if fall_time > ChaosTuning.FALL_DELAY and not fallen:
 		fallen = true; fell.emit()
-	var recover = bracing and grounded
+	var recover = (bracing or pushing) and grounded
 	if grounded and (not fallen or recover):
 		var target_y: float = ground.position.y + (.80 if bracing and not fallen else .93)
 		var force_y = (target_y-pelvis.global_position.y)*2600.0-pelvis.linear_velocity.y*280.0+588.0
-		pelvis.apply_central_force(Vector3(0,clampf(force_y,-350,1800),0))
+		pelvis.apply_central_force(Vector3(0,clampf(force_y,-350,2400 if pushing else 1900),0))
 		if recover and tilt < 28: fallen = false; fall_time = 0
 	var velocity_error = desired_velocity-Vector3(pelvis.linear_velocity.x,0,pelvis.linear_velocity.z)
-	if grounded: pelvis.apply_central_force((velocity_error*(310.0 if bracing else 65.0 if slippery else 210.0)).limit_length(520.0 if bracing else 380.0))
+	if grounded: pelvis.apply_central_force((velocity_error*(340.0 if pushing else 310.0 if bracing else 65.0 if slippery else 210.0)).limit_length(1050.0 if pushing else 520.0 if bracing else 440.0))
 	_pose(false,delta)
 	_update_grips(delta)
 	for body in bodies.values():
@@ -202,10 +236,10 @@ func _pose(sitting: bool, _delta: float):
 		var roll = 0.0
 		var strength = 75.0
 		if key == "torso":
-			angle = clampf(-local_velocity.z*.09,-.35,.35) + sin(phase*.65)*.025 + lean
-			roll = -local_velocity.x*.10 + sin(phase*.4)*.035
-			strength = 125.0 if not bracing else 205.0
-		elif key == "pelvis": strength = 160.0
+			angle = clampf(-local_velocity.z*.065,-.35,.35) + sin(phase*.65)*.025 + lean
+			roll = clampf(-local_velocity.x*.065,-.22,.22) + sin(phase*.4)*.035
+			strength = 340.0 if pushing else 245.0 if bracing else 170.0
+		elif key == "pelvis": strength = 280.0 if pushing else 200.0
 		elif key == "head": strength = 18.0; angle = -.05
 		elif key.begins_with("thigh"):
 			angle = PI/2 if sitting else sin(phase+(PI if key.ends_with("r") else 0.0))*.52*moving
@@ -217,7 +251,7 @@ func _pose(sitting: bool, _delta: float):
 		elif key.begins_with("upper") or key.begins_with("lower"):
 			var index = 0 if key.ends_with("l") else 1
 			angle = .65 if sitting else (.9 if grips[index]!=null else -sin(phase+PI*index)*.30*moving)
-			strength = 19.0
+			strength = 32.0 if pushing else 19.0
 			if sitting and gesture=="point" and index==0: angle = 1.5
 			if sitting and gesture=="drink" and index==1: angle = 1.15 if key.begins_with("upper") else 1.7
 		elif key.begins_with("hand"): strength = 4.0
@@ -256,6 +290,32 @@ func try_grab(index: int, preferred: RigidBody3D = null) -> bool:
 	grip_changed.emit()
 	return true
 
+func at_chair_back() -> bool:
+	if fallen or not is_instance_valid(chair) or chair.global_basis.y.dot(Vector3.UP)<.65: return false
+	var relative = chair.global_basis.inverse()*(center()-chair.global_position)
+	return relative.z>.25 and relative.z<1.8 and absf(relative.x)<.95
+
+func can_grab_handles() -> bool:
+	if not at_chair_back(): return false
+	var anchors = [Vector3(-.28,1.02,.30),Vector3(.28,1.02,.30)]
+	for i in range(2):
+		var hand: RigidBody3D = bodies["hand_l" if i==0 else "hand_r"]
+		var point: Vector3 = chair.global_transform*anchors[i]
+		if hand.global_position.distance_to(point)>ChaosTuning.HANDLE_REACH: return false
+		var hit = get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(hand.global_position,point,ChaosTuning.FLOOR|ChaosTuning.DOOR))
+		if not hit.is_empty(): return false
+	return true
+
+func grab_handles() -> bool:
+	if not can_grab_handles(): return false
+	var anchors = [Vector3(-.28,1.02,.30),Vector3(.28,1.02,.30)]
+	release_all()
+	for i in range(2):
+		grips[i] = chair; grip_anchors[i] = anchors[i]
+		bodies["hand_l" if i==0 else "hand_r"].add_collision_exception_with(chair)
+	grip_changed.emit()
+	return true
+
 func _update_grips(delta: float):
 	for i in range(2):
 		if not is_instance_valid(grips[i]):
@@ -264,11 +324,12 @@ func _update_grips(delta: float):
 		var other: RigidBody3D = grips[i]
 		var point = other.global_transform*grip_anchors[i]
 		var offset = point-hand.global_position
-		grip_strain[i] = clampf(offset.length()/ChaosTuning.BREAK_DISTANCE,0,1)
-		if offset.length()>ChaosTuning.BREAK_DISTANCE:
+		var break_distance = ChaosTuning.PUSH_BREAK_DISTANCE if pushing and other==chair else ChaosTuning.BREAK_DISTANCE
+		grip_strain[i] = clampf(offset.length()/break_distance,0,1)
+		if offset.length()>break_distance:
 			release(i); continue
 		var other_velocity = other.linear_velocity+other.angular_velocity.cross(point-other.global_position)
-		var force = (offset*650.0+(other_velocity-hand.linear_velocity)*24.0).limit_length(330)
+		var force = (offset*650.0+(other_velocity-hand.linear_velocity)*24.0).limit_length(420 if pushing else 330)
 		hand.apply_central_force(force)
 		other.apply_force(-force,point-other.global_position)
 		# The arm reaches towards the anchor; forces, rather than transforms, carry the load.

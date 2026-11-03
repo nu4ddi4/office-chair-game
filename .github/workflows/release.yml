@@ -5,7 +5,7 @@ on:
       tag:
         description: New product tag matching godot/project.godot
         required: true
-        default: OfficeChairChaos-v0.1.0
+        default: OfficeChairChaos-v0.1.1
       source_run_id:
         description: Successful Test run containing the verified Windows artifact
         required: true

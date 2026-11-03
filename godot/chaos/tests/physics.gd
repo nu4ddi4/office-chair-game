@@ -61,8 +61,9 @@ func run_tests():
 	game._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 	check(paused and not Input.is_action_pressed("chaos_forward"),"focus loss clears movement and pauses")
 	game.retry(); await frames(90)
-	var left=game.player.try_grab(0,game.chair)
-	var right=game.player.try_grab(1,game.chair)
+	game.interact()
+	var left=game.player.grips[0]==game.chair
+	var right=game.player.grips[1]==game.chair
 	check(left and right,"both hands can reach rear chair handles")
 	Input.action_press("chaos_forward"); await frames(300); Input.action_release("chaos_forward")
 	metrics.push_distance=14-game.chair.global_position.z
