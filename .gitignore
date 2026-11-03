@@ -15,3 +15,12 @@ godot/assets/models/Interior_07_Godot_*.png.import
 .npm-cache/
 node_modules/
 test-results/
+
+# Expanded office textures are extracted from the embedded GLB.
+godot/assets/models/Office_Chaos_*.jpg
+godot/assets/models/Office_Chaos_*.png
+godot/assets/models/Office_Chaos_*.jpg.import
+godot/assets/models/Office_Chaos_*.png.import
+chaos-results/
+chaos-dist/
+*.blend1
