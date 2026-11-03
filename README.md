@@ -15,13 +15,17 @@ godot --path godot
 
 | 입력 | 동작 |
 |---|---|
-| WASD / 마우스 | 이동 / 시점 |
+| WASD / 마우스 | 자유 이동 / 시점 |
+| 의자 뒤에서 E | 양손으로 손잡이 잡기 |
+| 양손 밀기 중 W/S, A/D | 전후진, 조향 (시점 방향과 독립) |
 | 마우스 좌·우 클릭 | 왼손·오른손 잡기 또는 놓기 |
-| Shift | 빠르게 밀기 |
-| Space | 버티기 / 넘어진 상태에서 일어나기 |
+| Shift | 달리기 / 밀기 중 부스트 |
+| Space | 밀기 중 제동 / 버티기 / 일어나기 |
 | E | 문 밀기, 커피 보충, 의자 세우기, 부장님 다시 태우기 |
 | R 1초 | 체크포인트 복구 |
 | Esc | 일시정지 |
+
+의자 뒤에서 E를 누르면 양손 밀기로 진입합니다. 마우스로 양쪽 손잡이를 잡아도 같은 조작이 활성화됩니다. 한 손을 놓으면 자유 이동으로 돌아갑니다. 부스트 직진은 버틸 수 있지만 급회전·급제동·충돌에서는 부장님이 떨어지고 커피도 많이 쏟아집니다.
 
 잡기는 클릭 유지가 기본이며 설정에서 누르는 동안 잡기로 바꿀 수 있습니다. 키·시야각·감도·음량·자막·화면 흔들림·품질도 설정할 수 있습니다.
 
@@ -77,10 +81,10 @@ godot --path godot -- --chaos-test --blockout --mission 1
 
 ## 정식 릴리스
 
-`main` 승격은 PR로 진행합니다. 승격 후 성공한 `Test` 실행 ID를 지정해 게시합니다. 태그는 프로젝트 버전과 일치하는 `OfficeChairChaos-vX.Y.Z`이며 기존 SecurityLab 태그와 릴리스는 보존합니다.
+0.x 개발은 최신 `main`에서 작업 브랜치를 만들고 PR로 `main`에 합칩니다. 통합 후 성공한 `Test` 실행 ID를 지정해 게시합니다. 태그는 프로젝트 버전과 일치하는 `OfficeChairChaos-vX.Y.Z`이며 기존 SecurityLab 태그와 릴리스는 보존합니다.
 
 ```sh
-gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.0 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
+gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.1 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
 ```
 
 게시 전 검증된 EXE의 SHA-256을 확인하고 EXE·ZIP·크레딧·라이선스·체크섬을 첨부합니다. ZIP은 압축을 풀어 바로 실행할 수 있습니다. 공개된 릴리스를 같은 태그로 덮어쓰지 않습니다.

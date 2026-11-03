@@ -85,7 +85,7 @@ func _label(parent: Node, text: String, at: Vector2, size: int) -> Label:
 func clear(title: String, body: String):
 	for child in column.get_children():
 		column.remove_child(child); child.queue_free()
-	var tag = _label(column,"OFFICE CHAIR CHAOS  /  사내 운행",Vector2.ZERO,14)
+	var tag = _label(column,"OFFICE CHAIR CHAOS  /  사내 운행  ·  "+str(ProjectSettings.get_setting("application/config/version")),Vector2.ZERO,14)
 	tag.add_theme_color_override("font_color",Color("e8bf75"))
 	var heading = _label(column,title,Vector2.ZERO,34)
 	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -107,7 +107,7 @@ func button(text: String, callback: Callable, disabled = false) -> Button:
 
 func main_menu():
 	mode = "main"
-	clear("김 대리,\n나 좀 밀어봐","부장님은 걷지 않습니다.\n김 대리는 제대로 걷지 못합니다.\n\nWASD 이동 · 마우스 양손 잡기 · Space 버티기")
+	clear("김 대리,\n나 좀 밀어봐","부장님은 걷지 않습니다.\n김 대리는 제대로 걷지 못합니다.\n\n기본: WASD 이동 · 의자 뒤에서 E로 손잡이 잡기\n밀기: W/S 전후진 · A/D 조향 · Shift 부스트")
 	button("계속하기",func(): game.continue_game(),game.store.data.resume.is_empty() and game.store.data.completed.is_empty())
 	if not game.store.error.is_empty(): _label(column,game.store.error,Vector2.ZERO,16)
 	button("새 게임",confirm_new)
@@ -174,7 +174,7 @@ func _slider(title: String, value: float, minimum: float, maximum: float, step: 
 func key_settings():
 	mode = "keys"
 	clear("키 변경","변경할 항목을 선택하세요. 마우스 양손 잡기는 고정입니다.")
-	var names = {"forward":"앞으로","back":"뒤로","left":"왼쪽","right":"오른쪽","sprint":"빠르게","brace":"버티기 / 일어나기","interact":"상황별 행동","reset":"체크포인트 복구"}
+	var names = {"forward":"앞으로","back":"뒤로","left":"왼쪽","right":"오른쪽","sprint":"달리기 / 부스트","brace":"버티기 / 일어나기","interact":"상황별 행동","reset":"체크포인트 복구"}
 	for key in names:
 		button(names[key]+"  ·  "+OS.get_keycode_string(game.keycode(key)),func(): rebinding=key; say("사용할 키를 눌러 주세요. Esc로 취소",30))
 	button("돌아가기",func(): game.apply_settings(); settings())
@@ -213,11 +213,19 @@ func _process(delta):
 	objective.text = "퇴근하세요 · 출구로 이동" if game.escaping else "%02d  %s  /  %s" % [int(run.mission.id),run.mission.title,run.mission.route[run.index].label]
 	var text = "거리 %dm" % int(game.player.center().distance_to(game.office.goal.global_position))
 	if not game.escaping:
-		if run.mission.min_coffee>0: text += "   커피 %d%% / 최소 %d%%" % [int(game.coffee.amount),int(run.mission.min_coffee)]
+		text += "   커피 %d%%" % int(game.coffee.amount)
+		if run.mission.min_coffee>0: text += " / 최소 %d%%" % int(run.mission.min_coffee)
 		if run.remaining>=0: text += "   남은 시간 %02d:%02d" % [int(run.remaining)/60,int(run.remaining)%60]
 		if not run.refilled: text += "   먼저 커피를 채워 주세요"
 	status.text = text
-	hands.text = "왼손 %s    오른손 %s    %s" % [_hand(0),_hand(1),"넘어짐 · Space로 일어나기" if game.player.fallen else "Space 버티기 / Shift 빠르게"]
+	if game.player.pushing:
+		status.text += "   %.1f m/s" % game.chair.linear_velocity.length()
+		var mode_text = "부스트" if game.chair.boosting else "양손 밀기"
+		hands.text = "%s · %s/%s 전후진 · %s/%s 조향 · %s 제동 · %s 부스트" % [mode_text,game.key_hint("forward"),game.key_hint("back"),game.key_hint("left"),game.key_hint("right"),game.key_hint("brace"),game.key_hint("sprint")]
+		if not game.boss.seated: hands.text += "   부장님 낙하!"
+		elif game.boss.seat_risk>.25: hands.text += "   부장님 휘청!"
+	else:
+		hands.text = "왼손 %s    오른손 %s    %s" % [_hand(0),_hand(1),"넘어짐 · Space로 일어나기" if game.player.fallen else "Space 버티기 / Shift 빠르게"]
 	hint.text = game.context_text()+"    |    "+game.key_hint("reset")+" 길게: 복구  ·  Esc: 메뉴"
 	progress.visible = game.reset_hold>0
 	progress.value = game.reset_hold

@@ -4,9 +4,9 @@
 
 ## 작업과 이력
 
-- 최신 beta에서 feature/*, fix/*, refactor/* 작업 브랜치를 만든다. main·beta에서 직접 개발하지 않는다.
+- 0.x 개발에서는 최신 main에서 feature/*, fix/*, refactor/* 작업 브랜치를 만든다. main에서 직접 개발하지 않는다. beta를 거치는 통합 단계는 사용하지 않는다.
 - 시작 전 브랜치·미커밋 변경·원격 기준을 확인한다. 다른 사람의 작업을 삭제하거나 덮어쓰지 않는다.
-- 관련 검증 후 큰 변경은 PR로 beta에 통합한다. main 승격은 사용자의 지시가 있을 때 PR로 진행한다.
+- 관련 검증 후 작업 브랜치에서 main 대상으로 PR을 만들고 main에 통합한다. 공개 릴리스는 사용자의 명시적 요청에 따라 main의 검증된 빌드로 게시한다.
 - 공유 이력을 rewrite하지 않는다. 레거시 브랜치·기존 태그·릴리스는 유지한다.
 - 로컬 Git 작성자·커미터: codex-nu4ddi4 / 95563468+nu4ddi4@users.noreply.github.com. PR·커밋에 Codex 작업임을 명시한다.
 
@@ -22,7 +22,7 @@
 ## 검증
 
 - 규칙·저장 변경: python3 scripts/test-game.py --godot PATH --suite rules
-- 물리·장면·입력 변경: 같은 명령의 --suite scene. 디스플레이가 있으면 --rendered로 실제 화면도 확인한다.
+- 물리·장면·입력 변경: 같은 명령의 --suite scene(physics·handling 포함). 밀기 조작만 빠르게 검사할 때는 --suite handling. 디스플레이가 있으면 --rendered로 실제 화면도 확인한다.
 - 큰 변경은 --suite all 한 번. 테스트는 실제 회귀 위험을 검사하며 같은 입력을 불필요하게 재검사하지 않는다.
 - 검사기는 원본 보호 지오메트리·새 맵 배치·미션 경로 검사도 포함한다. 원본 실행 회귀는 scripts/test-map.py로 확인한다.
 - 실제 경로의 강체 충돌 검사는 godot/chaos/tests/drive.gd다. 의자에 제한된 힘을 가해 경로·문을 검사하며 플레이어 숙련도나 재미를 입증하는 검사는 아니다.
