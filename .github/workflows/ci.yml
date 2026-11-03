@@ -56,6 +56,7 @@ jobs:
           version: 4.7.2
           use-dotnet: false
           include-templates: true
+      - uses: ./.github/actions/inno-setup
       - name: Locate console engine
         shell: pwsh
         run: |
@@ -71,7 +72,10 @@ jobs:
         run: |
           & $env:CHAOS_GODOT --headless --path godot --editor --import --quit
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          python scripts/build-game.py --godot "$env:CHAOS_GODOT" --verify
+          python scripts/build-game.py --godot "$env:CHAOS_GODOT" --verify --installer
+      - name: Install, update, recover and uninstall
+        shell: powershell
+        run: ./tests/windows/installer-update.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: OfficeChairChaos-Windows-x64

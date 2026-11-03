@@ -9,6 +9,10 @@ on:
       source_run_id:
         description: Successful Test run containing the verified Windows artifact
         required: true
+      cleanup_old_assets:
+        description: Consolidate duplicate 0.1.0 files after verifying the retained portable ZIP
+        type: boolean
+        default: false
 permissions:
   contents: write
   actions: read
@@ -38,7 +42,7 @@ jobs:
           gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN_ID" > "$RUNNER_TEMP/source-run.json"
           source_sha=$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["name"]=="Test" and r["conclusion"]=="success" and r["status"]=="completed"; print(r["head_sha"])' "$RUNNER_TEMP/source-run.json")
           git merge-base --is-ancestor "$source_sha" "$GITHUB_SHA"
-          git diff --exit-code "$source_sha" "$GITHUB_SHA" -- godot scripts/build-game.py scripts/build-chaos-office.py scripts/test-game.py scripts/check-chaos-assets.py
+          git diff --exit-code "$source_sha" "$GITHUB_SHA" -- godot installer .github/actions/inno-setup tests/windows scripts/build-game.py scripts/build-chaos-office.py scripts/test-game.py scripts/check-chaos-assets.py
           if git rev-parse --verify "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$GITHUB_SHA"
           fi
@@ -65,3 +69,7 @@ jobs:
           gh release view "$RELEASE_TAG" --json assets > "$RUNNER_TEMP/uploaded-assets.json"
           python3 -c 'import json,pathlib,sys; expected={p.name:p.stat().st_size for p in pathlib.Path("publish/assets").iterdir()}; actual={a["name"]:a["size"] for a in json.load(open(sys.argv[1]))["assets"]}; assert actual==expected, "Incomplete release upload"' "$RUNNER_TEMP/uploaded-assets.json"
           gh release edit "$RELEASE_TAG" --draft=false --latest
+
+      - name: Consolidate previous portable release
+        if: inputs.cleanup_old_assets
+        run: python3 scripts/clean-release-assets.py --tag OfficeChairChaos-v0.1.0 --apply

@@ -6,7 +6,7 @@ var error = ""
 var data = fresh()
 
 static func settings_defaults() -> Dictionary:
-	return {"sensitivity":.0022,"hold_grip":false,"fov":70.0,"shake":true,"volume":.65,"subtitle_size":24,"quality":1,"keys":{}}
+	return {"sensitivity":.0022,"hold_grip":false,"fov":70.0,"shake":true,"volume":.65,"subtitle_size":24,"quality":1,"keys":{},"auto_updates":true}
 
 static func fresh() -> Dictionary:
 	return {"version":ChaosTuning.SAVE_VERSION,"unlocked":1,"completed":[],"records":{},"resume":{},"settings":settings_defaults()}
@@ -24,9 +24,10 @@ static func valid(candidate) -> bool:
 		if not number(item,1,6) or int(item)!=item: return false
 	var s: Dictionary = candidate.settings
 	for key in settings_defaults():
-		if not s.has(key): return false
+		if key!="auto_updates" and not s.has(key): return false
 	if not number(s.sensitivity,.0005,.008) or not number(s.fov,60,90) or not number(s.volume,0,1): return false
 	if not number(s.subtitle_size,18,36) or not number(s.quality,0,2): return false
+	if not s.get("auto_updates",true) is bool: return false
 	if not s.hold_grip is bool or not s.shake is bool or not s.keys is Dictionary: return false
 	for key in s.keys:
 		if key not in ["forward","back","left","right","sprint","brace","interact","reset"] or not number(s.keys[key],1,4194400): return false
@@ -53,10 +54,11 @@ func load_progress() -> bool:
 	var path = directory.path_join("progress.json")
 	if not FileAccess.file_exists(path): return true
 	var parsed = read_json(path)
-	if valid(parsed): data = parsed; return true
+	if valid(parsed):
+		data = parsed; data.settings.auto_updates = data.settings.get("auto_updates",true); return true
 	var backup = read_json(directory.path_join("progress.backup.json")) if FileAccess.file_exists(directory.path_join("progress.backup.json")) else null
 	if valid(backup):
-		data = backup; error = "이전 정상 저장을 불러왔습니다."; return true
+		data = backup; data.settings.auto_updates = data.settings.get("auto_updates",true); error = "이전 정상 저장을 불러왔습니다."; return true
 	error = "저장 파일을 읽지 못했습니다. 원본을 보존하고 새 진행을 사용합니다."
 	DirAccess.copy_absolute(path,directory.path_join("progress.invalid.%d.json" % Time.get_unix_time_from_system()))
 	return false

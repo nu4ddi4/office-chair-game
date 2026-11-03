@@ -93,6 +93,15 @@ func run_tests():
 			check(game.context().get("kind","")=="coffee","mission %d refill prompt" % id)
 			game.interact(); check(game.run.refilled and game.coffee.amount==100,"mission %d refill" % id)
 	game.ui.settings(); await capture("05-settings")
+	game.ui.updates_menu(); await capture("09-updates")
+	var update_requests = [0]
+	game.updates.request_started.connect(func(_url): update_requests[0]+=1)
+	game.updates.latest = {"version":"0.2.0"}
+	game.ui.confirm_update()
+	check(game.ui.mode=="update_confirm" and update_requests[0]==0,"update confirmation does not download before approval")
+	game.ui.updates_menu()
+	check(update_requests[0]==0 and not game.updates.busy(),"declining an update keeps the current game")
+	game.updates.latest = {}; game.ui.settings()
 	game.rebind("forward",KEY_UP)
 	check(game.keycode("forward")==KEY_UP,"key rebinding")
 	game.apply_settings()

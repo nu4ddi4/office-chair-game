@@ -23,8 +23,7 @@ class PackageTests(unittest.TestCase):
         self.update_checksum()
 
     def update_checksum(self):
-        checksum = release.digest(self.source / 'OfficeChairChaos.exe')
-        (self.source / 'SHA256SUMS.txt').write_text(checksum + '  OfficeChairChaos.exe\n')
+        (self.source / 'SHA256SUMS.txt').write_text(''.join(release.digest(self.source/name)+'  '+name+'\n' for name in release.FILES))
 
     def prepare(self, tag='OfficeChairChaos-v0.1.0'):
         return release.prepare(self.source, self.root / 'publish', '0.1.0', tag, '123', 'a' * 40, 'example/renamed-office')
@@ -32,11 +31,12 @@ class PackageTests(unittest.TestCase):
     def test_verified_binary_is_preserved_and_bundled_with_licenses(self):
         archive = self.prepare()
         assets = archive.parent
-        self.assertEqual((assets / 'OfficeChairChaos.exe').read_bytes(), (self.source / 'OfficeChairChaos.exe').read_bytes())
+        self.assertEqual((assets / 'OfficeChairChaos-Setup.exe').read_bytes(), (self.source / 'OfficeChairChaos-Setup.exe').read_bytes())
+        self.assertEqual({p.name for p in assets.iterdir()}, {'OfficeChairChaos-Setup.exe', 'OfficeChairChaos-0.1.0-Windows-x64.zip', 'SHA256SUMS.txt'})
         with zipfile.ZipFile(archive) as bundle:
             self.assertEqual(bundle.read('OfficeChairChaos/OfficeChairChaos.exe'), (self.source / 'OfficeChairChaos.exe').read_bytes())
-            self.assertIn('OfficeChairChaos/CREDITS.txt', bundle.namelist())
-            self.assertIn('OfficeChairChaos/FONT-LICENSE.txt', bundle.namelist())
+            self.assertIn('OfficeChairChaos/LICENSES.txt', bundle.namelist())
+            self.assertNotIn('OfficeChairChaos/office-chair.install.json', bundle.namelist())
         self.assertIn('https://github.com/example/renamed-office/actions/runs/123', (assets.parent / 'notes.md').read_text(encoding='utf-8'))
         for line in (assets / 'SHA256SUMS.txt').read_text().splitlines():
             expected, name = line.split()
@@ -48,8 +48,13 @@ class PackageTests(unittest.TestCase):
             self.prepare()
         self.assertFalse((self.root / 'publish').exists())
 
+    def test_corrupt_installer_is_rejected(self):
+        (self.source / 'OfficeChairChaos-Setup.exe').write_bytes(b'MZchanged')
+        with self.assertRaisesRegex(ValueError, 'checksum'):
+            self.prepare()
+
     def test_missing_license_is_rejected(self):
-        (self.source / 'CREDITS.txt').unlink()
+        (self.source / 'LICENSES.txt').unlink()
         with self.assertRaisesRegex(ValueError, 'Missing'):
             self.prepare()
 
