@@ -1,50 +1,41 @@
 name: Test
 on:
-  workflow_call:
-    inputs:
-      force_runtime:
-        type: boolean
-        default: false
+  push:
+    branches: [main, beta]
   pull_request:
-    branches: [main]
+    branches: [main, beta]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+  group: map-test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 jobs:
   test:
-    # Keep the protected main branch's required check name.
+    # Preserve the protected main branch's required check name.
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           lfs: false
-      - name: Check test and release policy
-        run: python3 -m unittest discover -s tests/ci
-      - name: Select affected code
-        id: scope
-        env:
-          FORCE_RUNTIME: ${{ inputs.force_runtime }}
-        run: python3 scripts/ci_scope.py
-      - name: Reuse successful checks for identical inputs
-        if: steps.scope.outputs.runtime == 'true'
-        id: verified
-        uses: actions/cache@v4
+      - name: Fetch the retained office map
+        run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb" --exclude=""
+      - uses: chickensoft-games/setup-godot@v2
         with:
-          path: .cache/ci-verified
-          key: quick-4.7.2-v1-${{ runner.os }}-${{ hashFiles('godot/**', 'scripts/ci-godot-test.py', 'scripts/prototype-test.py', 'scripts/release_version.py', '.github/actions/godot-setup/action.yml', '.github/workflows/ci.yml') }}
-      - uses: ./.github/actions/godot-setup
-        if: steps.scope.outputs.runtime == 'true' && steps.verified.outputs.cache-hit != 'true'
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+      - name: Lint the map workflow
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Check geometry, movement, doors, pause and rendered input
+        run: xvfb-run -a -s "-screen 0 1600x1200x24" python3 scripts/test-map.py --godot godot --rendered
+      - name: Retain map review screens and results
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          export: 'false'
-      - name: Investigation rules, saves, services and input
-        if: steps.scope.outputs.runtime == 'true' && steps.verified.outputs.cache-hit != 'true'
-        run: |
-          python3 scripts/ci-godot-test.py --godot "$SECURITY_LAB_GODOT_CONSOLE"
-          mkdir -p .cache/ci-verified
-          echo "Godot 4.7.2: all quick checks passed" > .cache/ci-verified/passed.txt
+          name: office-map-review-${{ github.run_id }}
+          path: map-results/
+          if-no-files-found: ignore
+          retention-days: 14
