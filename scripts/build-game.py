@@ -7,7 +7,6 @@ from pathlib import Path
 import os
 import platform
 import re
-import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +40,7 @@ def main():
         (destination/obsolete).unlink(missing_ok=True)
     exe = destination/'OfficeChairChaos.exe'
     assert exe.read_bytes()[:2] == b'MZ', 'Expected a Windows executable'
-    version = re.search(r'^config/version="([^"]+)"', (ROOT/'godot/project.godot').read_text(), re.M).group(1)
+    version = re.search(r'^config/version="([^"]+)"', (ROOT/'godot/project.godot').read_text(encoding='utf-8'), re.M).group(1)
     (destination/'office-chair.install.json').write_text(json.dumps(
         {'product':'OfficeChairChaos','app_id':'OfficeChairChaos','version':version}), encoding='utf-8')
     if args.verify:
