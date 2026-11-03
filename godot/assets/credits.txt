@@ -65,3 +65,6 @@ High-resolution authoring master is separate from the 2K runtime export.
 Interior 06 entry/server floor finishes and cleaned frame geometry: project-generated.
 
 Interior 07: original project-generated laminate/fabric/metal roughness, fabric normals, carpet finish, shared desk props and network console laptop. Live equipment screens, office sample graphics and printed procedures are project-authored Canvas graphics. No new external asset sources.
+
+Office Chair Chaos: the retained Interior 07 furniture and materials were rearranged into a 60x42m office. New shell, ragdoll characters, transport chair geometry, props, UI and procedural audio are project-authored. Original retained Office Chair attribution above remains applicable to desk-group decorations.
+Noto Sans KR variable font — Noto project, SIL Open Font License 1.1. See assets/fonts/OFL.txt.
