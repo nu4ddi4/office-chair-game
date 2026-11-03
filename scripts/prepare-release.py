@@ -2,6 +2,7 @@
 """Package a previously verified Windows artifact without rebuilding it."""
 import argparse
 import hashlib
+import os
 from pathlib import Path
 import re
 import shutil
@@ -15,7 +16,9 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prepare(source, output, version, tag, run_id, commit):
+def prepare(source, output, version, tag, run_id, commit, repository):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        raise ValueError("Expected the current GitHub repository owner/name")
     if not re.fullmatch(r'\d+\.\d+\.\d+', version) or tag != f'OfficeChairChaos-v{version}':
         raise ValueError('The release tag must match the game version and new product name')
     if not re.fullmatch(r'\d+', str(run_id)) or not re.fullmatch(r'[0-9a-f]{40}', commit):
@@ -62,7 +65,7 @@ def prepare(source, output, version, tag, run_id, commit):
 - 확장 사무실, 물리 문, 커피·미끄럼·바람과 연결된 6개 미션.
 - 체크포인트, 미션 해금·기록, 독립 저장, 조작·화면·음향 설정.
 
-Linux 검사와 실제 Windows EXE 실행을 통과한 [빌드](https://github.com/nu4ddi4/security-lab-game/actions/runs/{run_id})를 재사용했습니다. 릴리스 대상 main 커밋: `{commit}`.
+Linux 검사와 실제 Windows EXE 실행을 통과한 [빌드](https://github.com/{repository}/actions/runs/{run_id})를 재사용했습니다. 릴리스 대상 main 커밋: `{commit}`.
 
 Windows x64용 첫 버전입니다. 플레이 분량·밸런스·기준 GPU 성능은 추가 실플레이 확인 대상입니다. 기존 SecurityLab 릴리스와 저장·자동 업데이트는 사용하지 않습니다.
 '''
@@ -77,9 +80,10 @@ def main():
     parser.add_argument('--tag', required=True)
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--commit', required=True)
+    parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY', ''))
     args = parser.parse_args()
     version = re.search(r'^config/version="([^"]+)"', (ROOT / 'godot/project.godot').read_text(), re.M).group(1)
-    print(prepare(args.source, args.output, version, args.tag, args.run_id, args.commit))
+    print(prepare(args.source, args.output, version, args.tag, args.run_id, args.commit, args.repository))
 
 
 if __name__ == '__main__':

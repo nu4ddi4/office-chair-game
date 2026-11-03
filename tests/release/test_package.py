@@ -27,7 +27,7 @@ class PackageTests(unittest.TestCase):
         (self.source / 'SHA256SUMS.txt').write_text(checksum + '  OfficeChairChaos.exe\n')
 
     def prepare(self, tag='OfficeChairChaos-v0.1.0'):
-        return release.prepare(self.source, self.root / 'publish', '0.1.0', tag, '123', 'a' * 40)
+        return release.prepare(self.source, self.root / 'publish', '0.1.0', tag, '123', 'a' * 40, 'example/renamed-office')
 
     def test_verified_binary_is_preserved_and_bundled_with_licenses(self):
         archive = self.prepare()
@@ -37,6 +37,7 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(bundle.read('OfficeChairChaos/OfficeChairChaos.exe'), (self.source / 'OfficeChairChaos.exe').read_bytes())
             self.assertIn('OfficeChairChaos/CREDITS.txt', bundle.namelist())
             self.assertIn('OfficeChairChaos/FONT-LICENSE.txt', bundle.namelist())
+        self.assertIn('https://github.com/example/renamed-office/actions/runs/123', (assets.parent / 'notes.md').read_text(encoding='utf-8'))
         for line in (assets / 'SHA256SUMS.txt').read_text().splitlines():
             expected, name = line.split()
             self.assertEqual(hashlib.sha256((assets / name).read_bytes()).hexdigest(), expected)
