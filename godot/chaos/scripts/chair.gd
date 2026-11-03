@@ -4,6 +4,35 @@ extends RigidBody3D
 var wheels: Array[Node3D] = []
 var slippery = false
 var braked = false
+var driving = false
+var drive_heading = 0.0
+var boosting = false
+
+func drive(delta: float, throttle: float, steer: float, boost: bool, brake: bool):
+	driving = true
+	boosting = boost and throttle>0 and not brake
+	braked = brake
+	var steer_rate = ChaosTuning.BOOST_STEER_RATE if boosting else ChaosTuning.PUSH_STEER_RATE
+	drive_heading -= steer*steer_rate*delta
+	var forward = -global_basis.z
+	forward.y = 0; forward = forward.normalized()
+	var side = global_basis.x
+	side.y = 0; side = side.normalized()
+	var target_speed = throttle*(ChaosTuning.PUSH_BOOST_SPEED if boosting else ChaosTuning.PUSH_SPEED)
+	if throttle<0: target_speed = throttle*ChaosTuning.PUSH_REVERSE_SPEED
+	if brake: target_speed = 0
+	var cap = ChaosTuning.BRAKE_FORCE if brake else ChaosTuning.BOOST_FORCE if boosting else ChaosTuning.PUSH_FORCE
+	var gain = 35.0 if absf(throttle)<.01 and not brake else 210.0
+	var force = clampf((target_speed-linear_velocity.dot(forward))*gain,-cap,cap)
+	# Propulsion and yaw are independent of where the camera happens to look.
+	# The employee's spring grips still transmit load, impacts and grip breakage.
+	apply_central_force(forward*force)
+	var side_limit = 140.0 if slippery else 620.0
+	apply_central_force(-side*clampf(linear_velocity.dot(side)*(18.0 if slippery else 220.0),-side_limit,side_limit))
+	var yaw_error = wrapf(drive_heading-rotation.y,-PI,PI)
+	apply_torque(Vector3.UP*clampf(yaw_error*420-angular_velocity.y*90,-360,360))
+	var angular_planar = Vector3(angular_velocity.x,0,angular_velocity.z)
+	apply_torque((global_basis.y.cross(Vector3.UP)*180-angular_planar*24).limit_length(150))
 
 func _ready():
 	mass = 12
@@ -52,4 +81,5 @@ func restore(at: Vector3, yaw: float):
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	sleeping = false
+	driving = false; boosting = false; braked = false; drive_heading = yaw
 	reset_physics_interpolation()

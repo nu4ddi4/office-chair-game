@@ -15,8 +15,10 @@ var coffee: ChaosCoffee
 var camera: Camera3D
 var audio: ChaosAudio
 var ui: ChaosUI
+var updates: ChaosUpdater
 var yaw = 0.0
 var pitch = .36
+var look_idle = 0.0
 var reset_hold = 0.0
 var distance_timer = 0.0
 var escaping = false
@@ -54,7 +56,13 @@ func _ready():
 	player.fell.connect(func(): audio.play("impact",.5))
 	office.prop_damaged.connect(func(price):
 		if run!=null and run.phase=="playing": run.damage += price; audio.play("impact",.6))
+	updates = ChaosUpdater.new(); add_child(updates); updates.setup(self)
+	if not qa: updates.installer_ready.connect(updates.launch_installer)
+	updates.changed.connect(func():
+		if ui.mode=="updates": ui.refresh_updates()
+		elif ui.mode=="main" and updates.state=="available": ui.main_menu())
 	apply_settings(); ui.main_menu(); ready_for_play = true
+	_report_update_health.call_deferred()
 	print("CHAOS_READY ",JSON.stringify({"engine":Engine.get_version_info().string,"detailed":office.detailed,"bodies":player.bodies.size()+boss.bodies.size()+office.props.size()+office.doors.size()+2,"user_dir":OS.get_user_data_dir()}))
 	var args = OS.get_cmdline_user_args()
 	if qa and "--mission" in args:
@@ -126,17 +134,20 @@ func _restore_checkpoint():
 	office.hazards = run.mission.get("hazards",false)
 	yaw = facing; pitch = .36; camera_target = player.center()+Vector3(0,.5,0); _update_camera(1)
 	reset_hold = 0; previous_chair_velocity = Vector3.ZERO; impact_cooldown = 1; _update_goal()
+	look_idle = 0
 
 func retry():
 	if run==null: return
 	run.retries += 1; escaping = false; _restore_checkpoint(); ui.field(); ui.say("괜찮아. 회사 물건이잖아.",3)
 
-func persist_checkpoint():
-	if run==null or checkpoint_state.is_empty() or run.phase=="success": return
+func persist_checkpoint() -> bool:
+	if run==null or checkpoint_state.is_empty() or run.phase=="success": return store.write()
 	var saved = checkpoint_state.duplicate(true)
 	saved.elapsed = run.elapsed; saved.falls = run.falls; saved.damage = run.damage; saved.retries = run.retries
 	store.data.resume = saved
-	if not store.write() and ui!=null: ui.say(store.error,6)
+	var saved_ok = store.write()
+	if not saved_ok and ui!=null: ui.say(store.error,6)
+	return saved_ok
 
 func _update_goal():
 	var waypoint: Dictionary = run.mission.route[run.index]
@@ -146,10 +157,7 @@ func _physics_process(delta):
 	if not ready_for_play or ui.mode!="field" or get_tree().paused or run==null: return
 	var axes = Input.get_vector("chaos_left","chaos_right","chaos_forward","chaos_back")
 	player.bracing = Input.is_action_pressed("chaos_brace")
-	var speed = ChaosTuning.BRACE_SPEED if player.bracing else ChaosTuning.RUN_SPEED if Input.is_action_pressed("chaos_sprint") else ChaosTuning.WALK_SPEED
-	player.desired_velocity = Basis(Vector3.UP,yaw)*Vector3(axes.x,0,axes.y)*speed
-	if axes.length()>.05: player.facing = lerp_angle(player.facing,yaw,1-exp(-delta*6))
-	chair.braked = player.bracing and (player.grips[0]==chair or player.grips[1]==chair)
+	_update_locomotion(delta,axes)
 	office.apply_hazards(player,chair); office.apply_hazards(boss,chair)
 	if escaping:
 		if player.center().distance_to(exit_point+Vector3(0,.92,0))<1.8: _finish()
@@ -171,9 +179,34 @@ func _physics_process(delta):
 	if "--package-smoke" in OS.get_cmdline_user_args():
 		package_frames += 1
 		if package_frames >= 240:
-			var passed = boss.seated and not player.fallen and player.center().y>.65 and office.detailed
+			var passed = boss.seated and not player.fallen and player.center().y>.65 and office.detailed and FileAccess.file_exists("res://chaos/resources/update_helper.ps1")
 			print("CHAOS_PACKAGE_SMOKE ",JSON.stringify({"passed":passed}))
 			get_tree().quit(0 if passed else 1)
+
+func _update_locomotion(delta: float, axes: Vector2):
+	var both_handles = player.grips[0]==chair and player.grips[1]==chair
+	if not both_handles or player.fallen or chair.global_basis.y.dot(Vector3.UP)<.6:
+		player.pushing = false
+	elif not player.pushing and player.at_chair_back():
+		player.pushing = true
+		chair.drive_heading = chair.rotation.y
+	chair.driving = player.pushing
+	chair.boosting = false
+	if player.pushing:
+		var throttle = -Input.get_axis("chaos_forward","chaos_back")
+		var steer = Input.get_axis("chaos_left","chaos_right")
+		chair.drive(delta,throttle,steer,Input.is_action_pressed("chaos_sprint"),player.bracing)
+		var rear = chair.global_basis*Vector3(0,0,ChaosTuning.PUSH_FOLLOW_DISTANCE)
+		var error = chair.global_position+rear-player.center(); error.y = 0
+		var following = chair.linear_velocity+chair.angular_velocity.cross(rear)+error*4.5
+		player.desired_velocity = Vector3(following.x,0,following.z).limit_length(10)
+		player.facing = lerp_angle(player.facing,chair.rotation.y,1-exp(-delta*12))
+		if look_idle<=0: yaw = lerp_angle(yaw,chair.rotation.y,1-exp(-delta*3))
+	else:
+		var speed = ChaosTuning.BRACE_SPEED if player.bracing else ChaosTuning.RUN_SPEED if Input.is_action_pressed("chaos_sprint") else ChaosTuning.WALK_SPEED
+		player.desired_velocity = Basis(Vector3.UP,yaw)*Vector3(axes.x,0,axes.y)*speed
+		if axes.length()>.05: player.facing = lerp_angle(player.facing,yaw,1-exp(-delta*6))
+		chair.braked = player.bracing and (player.grips[0]==chair or player.grips[1]==chair)
 
 func _handle_progress(event: String):
 	if event.is_empty(): return
@@ -209,6 +242,11 @@ func _unhandled_input(event):
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:
 		if ui.mode=="field": persist_checkpoint(); ui.pause_menu()
 		elif ui.mode=="pause": ui.field()
+		elif ui.mode=="notices": ui.credits()
+		elif ui.mode=="credits": ui.main_menu()
+		elif ui.mode=="update_confirm": ui.updates_menu()
+		elif ui.mode=="updates":
+			updates.cancel_download(); ui.settings()
 		elif ui.mode=="settings" or ui.mode=="keys":
 			apply_settings(); store.write()
 			if run!=null and (run.phase=="playing" or escaping): ui.pause_menu()
@@ -216,6 +254,7 @@ func _unhandled_input(event):
 		get_viewport().set_input_as_handled(); return
 	if ui.mode!="field": return
 	if event is InputEventMouseMotion and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:
+		look_idle = 2.5
 		yaw-=event.relative.x*float(store.data.settings.sensitivity)
 		pitch=clampf(pitch+event.relative.y*float(store.data.settings.sensitivity),-.20,.85)
 	if event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_LEFT,MOUSE_BUTTON_RIGHT]:
@@ -226,6 +265,9 @@ func _unhandled_input(event):
 
 func _process(delta):
 	if not ready_for_play or ui.mode!="field": return
+	look_idle = maxf(0,look_idle-delta)
+	var speed_fov = clampf(chair.linear_velocity.length()/ChaosTuning.PUSH_BOOST_SPEED,0,1)*8 if player.pushing else 0.0
+	camera.fov = lerpf(camera.fov,float(store.data.settings.fov)+speed_fov,1-exp(-delta*4))
 	_update_camera(delta); shake=maxf(0,shake-delta*.25)
 
 func _update_camera(delta):
@@ -262,6 +304,8 @@ func context() -> Dictionary:
 		var d=point.distance_to(player.center())
 		if d<distance and _visible(point,door.leaf): nearest=door; distance=d
 	if nearest!=null: return {"kind":"door","text":"문 밀기","target":nearest}
+	if player.pushing: return {"kind":"release","text":"의자 놓기"}
+	if player.can_grab_handles(): return {"kind":"push","text":"손잡이 잡고 앞으로 밀기"}
 	return {}
 
 func context_text() -> String:
@@ -274,6 +318,9 @@ func interact():
 	var action=context()
 	if action.is_empty(): return
 	match action.kind:
+		"push":
+			if player.grab_handles(): audio.play("grip",.6)
+		"release": player.release_all()
 		"coffee":
 			coffee.amount=100; coffee.grace=1; run.refilled=true
 			checkpoint_state.coffee=100; checkpoint_state.refilled=true; persist_checkpoint(); ui.say("가득. 아주 가득.")
@@ -299,3 +346,7 @@ func clear_inputs():
 	if player!=null:
 		player.desired_velocity = Vector3.ZERO
 		if store.data.settings.hold_grip: player.release_all()
+
+func _report_update_health():
+	if DisplayServer.get_name()!="headless": await RenderingServer.frame_post_draw
+	if ready_for_play and office.detailed: updates.write_health()

@@ -4,6 +4,7 @@ extends Node3D
 signal spilled(amount: float)
 var amount = 100.0
 var previous_velocity = Vector3.ZERO
+var filtered_acceleration = Vector3.ZERO
 var boss: ChaosRagdoll
 var liquid: MeshInstance3D
 var cup: RigidBody3D
@@ -53,19 +54,24 @@ func reconnect():
 	joint.global_position = hand.global_position
 	joint.node_a = joint.get_path_to(hand); joint.node_b = joint.get_path_to(cup)
 	previous_velocity = hand.linear_velocity
+	filtered_acceleration = Vector3.ZERO
 	grace = 1
 
 func _physics_process(delta):
 	if boss == null: return
 	var velocity: Vector3 = boss.bodies.hand_r.linear_velocity
-	var acceleration = (velocity-previous_velocity)/maxf(delta,.001)
+	var raw_acceleration = (velocity-previous_velocity)/maxf(delta,.001)
+	filtered_acceleration = filtered_acceleration.lerp(raw_acceleration,1-exp(-delta/.1))
+	var acceleration = filtered_acceleration
 	previous_velocity = velocity
 	grace = maxf(0,grace-delta)
 	var tilt = acos(clampf(cup.global_basis.y.dot(Vector3.UP),-1,1))
 	# A damped upright tendency keeps a quiet cup stable while allowing impact spill.
-	cup.apply_torque(cup.global_basis.y.cross(Vector3.UP)*.9-cup.angular_velocity*.09)
-	var loss = (maxf(0,tilt-.48)*11.0 + maxf(0,Vector2(acceleration.x,acceleration.z).length()-7.5)*.045)*delta if grace<=0 else 0.0
-	if not boss.seated and grace<=0: loss += delta*12
+	cup.apply_torque(cup.global_basis.y.cross(Vector3.UP)*.6-cup.angular_velocity*.075)
+	var rate = maxf(0,tilt-ChaosTuning.COFFEE_TILT_THRESHOLD)*ChaosTuning.COFFEE_TILT_SPILL
+	rate += maxf(0,Vector2(acceleration.x,acceleration.z).length()-ChaosTuning.COFFEE_ACCEL_THRESHOLD)*ChaosTuning.COFFEE_ACCEL_SPILL
+	if not boss.seated: rate += 35
+	var loss = minf(rate,90)*delta if grace<=0 else 0.0
 	var before = amount
 	amount = clampf(amount-loss,0,100)
 	liquid.position.y = -.065+.125*amount/100

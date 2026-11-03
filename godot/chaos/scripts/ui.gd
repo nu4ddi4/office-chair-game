@@ -16,6 +16,8 @@ var subtitle_left = 0.0
 var progress: ProgressBar
 var rebinding = ""
 var mode = "main"
+var update_label: Label
+var update_progress: ProgressBar
 
 func setup(owner):
 	game = owner
@@ -85,7 +87,7 @@ func _label(parent: Node, text: String, at: Vector2, size: int) -> Label:
 func clear(title: String, body: String):
 	for child in column.get_children():
 		column.remove_child(child); child.queue_free()
-	var tag = _label(column,"OFFICE CHAIR CHAOS  /  사내 운행",Vector2.ZERO,14)
+	var tag = _label(column,"OFFICE CHAIR CHAOS  /  사내 운행  ·  "+str(ProjectSettings.get_setting("application/config/version")),Vector2.ZERO,14)
 	tag.add_theme_color_override("font_color",Color("e8bf75"))
 	var heading = _label(column,title,Vector2.ZERO,34)
 	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -107,12 +109,15 @@ func button(text: String, callback: Callable, disabled = false) -> Button:
 
 func main_menu():
 	mode = "main"
-	clear("김 대리,\n나 좀 밀어봐","부장님은 걷지 않습니다.\n김 대리는 제대로 걷지 못합니다.\n\nWASD 이동 · 마우스 양손 잡기 · Space 버티기")
+	clear("김 대리,\n나 좀 밀어봐","부장님은 걷지 않습니다.\n김 대리는 제대로 걷지 못합니다.\n\n기본: WASD 이동 · 의자 뒤에서 E로 손잡이 잡기\n밀기: W/S 전후진 · A/D 조향 · Shift 부스트")
 	button("계속하기",func(): game.continue_game(),game.store.data.resume.is_empty() and game.store.data.completed.is_empty())
 	if not game.store.error.is_empty(): _label(column,game.store.error,Vector2.ZERO,16)
+	if game.updates!=null and not game.updates.local_notice.is_empty():
+		var notice = _label(column,game.updates.local_notice,Vector2.ZERO,16); notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
 	button("새 게임",confirm_new)
 	button("미션 선택",missions)
 	button("설정",settings)
+	if game.updates!=null and not game.updates.latest.is_empty(): button("업데이트 "+str(game.updates.latest.version),updates_menu)
 	button("크레딧",credits)
 	button("종료",func(): game.get_tree().quit())
 
@@ -161,6 +166,7 @@ func settings():
 	button("화면 흔들림: "+("켜짐" if values.shake else "꺼짐"),func(): values.shake=not values.shake; settings())
 	button("그래픽: "+["낮음","중간","높음"][int(values.quality)],func(): values.quality=(int(values.quality)+1)%3; settings())
 	button("키 변경",key_settings)
+	button("업데이트",updates_menu)
 	button("저장하고 돌아가기",func(): game.apply_settings(); game.store.write(); pause_menu() if game.run!=null and (game.run.phase=="playing" or game.escaping) else main_menu())
 
 func _slider(title: String, value: float, minimum: float, maximum: float, step: float, changed: Callable):
@@ -174,14 +180,15 @@ func _slider(title: String, value: float, minimum: float, maximum: float, step: 
 func key_settings():
 	mode = "keys"
 	clear("키 변경","변경할 항목을 선택하세요. 마우스 양손 잡기는 고정입니다.")
-	var names = {"forward":"앞으로","back":"뒤로","left":"왼쪽","right":"오른쪽","sprint":"빠르게","brace":"버티기 / 일어나기","interact":"상황별 행동","reset":"체크포인트 복구"}
+	var names = {"forward":"앞으로","back":"뒤로","left":"왼쪽","right":"오른쪽","sprint":"달리기 / 부스트","brace":"버티기 / 일어나기","interact":"상황별 행동","reset":"체크포인트 복구"}
 	for key in names:
 		button(names[key]+"  ·  "+OS.get_keycode_string(game.keycode(key)),func(): rebinding=key; say("사용할 키를 눌러 주세요. Esc로 취소",30))
 	button("돌아가기",func(): game.apply_settings(); settings())
 
 func credits():
 	mode = "credits"
-	clear("함께 만든 사무실","사무실 자산: 기존 프로젝트의 Interior 07을 재배치·확장했습니다.\nOffice Chair — CMHT Oculus / Poly Pizza / CC BY 3.0\n재질·소품 — Poly Haven / CC0\n한국어 폰트 — Noto Sans KR / SIL OFL\n엔진 — Godot / MIT\n전체 출처는 배포 폴더의 CREDITS.txt와 LICENSES.txt에 있습니다.")
+	clear("함께 만든 사무실","사무실 자산: 기존 프로젝트의 Interior 07을 재배치·확장했습니다.\nOffice Chair — CMHT Oculus / Poly Pizza / CC BY 3.0\n재질·소품 — Poly Haven / CC0\n한국어 폰트 — Noto Sans KR / SIL OFL\n엔진 — Godot / MIT\n전체 고지는 설치 폴더의 LICENSES.txt와 아래 화면에서 확인할 수 있습니다.")
+	button("전체 라이선스",notices)
 	button("돌아가기",main_menu)
 
 func result(success: bool):
@@ -205,6 +212,7 @@ func say(text: String, seconds = 4.0):
 	game.audio.play("speech")
 
 func _process(delta):
+	if mode=="updates": refresh_updates(); return
 	if mode!="field": return
 	subtitle_left = maxf(0,subtitle_left-delta)
 	subtitle.visible = subtitle_left>0
@@ -213,11 +221,20 @@ func _process(delta):
 	objective.text = "퇴근하세요 · 출구로 이동" if game.escaping else "%02d  %s  /  %s" % [int(run.mission.id),run.mission.title,run.mission.route[run.index].label]
 	var text = "거리 %dm" % int(game.player.center().distance_to(game.office.goal.global_position))
 	if not game.escaping:
-		if run.mission.min_coffee>0: text += "   커피 %d%% / 최소 %d%%" % [int(game.coffee.amount),int(run.mission.min_coffee)]
+		text += "   커피 %d%%" % int(game.coffee.amount)
+		if run.mission.min_coffee>0: text += " / 최소 %d%%" % int(run.mission.min_coffee)
 		if run.remaining>=0: text += "   남은 시간 %02d:%02d" % [int(run.remaining)/60,int(run.remaining)%60]
 		if not run.refilled: text += "   먼저 커피를 채워 주세요"
 	status.text = text
-	hands.text = "왼손 %s    오른손 %s    %s" % [_hand(0),_hand(1),"넘어짐 · Space로 일어나기" if game.player.fallen else "Space 버티기 / Shift 빠르게"]
+	if game.updates!=null and not game.updates.latest.is_empty(): status.text += "   새 버전 "+str(game.updates.latest.version)+" · 설정에서 업데이트"
+	if game.player.pushing:
+		status.text += "   %.1f m/s" % game.chair.linear_velocity.length()
+		var mode_text = "부스트" if game.chair.boosting else "양손 밀기"
+		hands.text = "%s · %s/%s 전후진 · %s/%s 조향 · %s 제동 · %s 부스트" % [mode_text,game.key_hint("forward"),game.key_hint("back"),game.key_hint("left"),game.key_hint("right"),game.key_hint("brace"),game.key_hint("sprint")]
+		if not game.boss.seated: hands.text += "   부장님 낙하!"
+		elif game.boss.seat_risk>.25: hands.text += "   부장님 휘청!"
+	else:
+		hands.text = "왼손 %s    오른손 %s    %s" % [_hand(0),_hand(1),"넘어짐 · Space로 일어나기" if game.player.fallen else "Space 버티기 / Shift 빠르게"]
 	hint.text = game.context_text()+"    |    "+game.key_hint("reset")+" 길게: 복구  ·  Esc: 메뉴"
 	progress.visible = game.reset_hold>0
 	progress.value = game.reset_hold
@@ -232,3 +249,43 @@ func _input(event):
 		if event.keycode!=KEY_ESCAPE:
 			game.rebind(rebinding,event.physical_keycode)
 		rebinding = ""; key_settings(); get_viewport().set_input_as_handled()
+
+func notices():
+	mode = "notices"
+	clear("라이선스와 출처", "사용한 자산·폰트·엔진의 원문 고지입니다.")
+	var text = RichTextLabel.new(); column.add_child(text)
+	text.custom_minimum_size = Vector2(580,400); text.bbcode_enabled = false
+	text.text = FileAccess.get_file_as_string("res://assets/credits.txt")+"\n\n"+FileAccess.get_file_as_string("res://LICENSES.txt")+"\n\nNoto Sans KR\n"+FileAccess.get_file_as_string("res://assets/fonts/OFL.txt")
+	button("돌아가기",credits)
+
+func updates_menu():
+	mode = "updates"
+	clear("업데이트", "현재 버전 "+game.updates.current_version+" · "+("설치형" if game.updates.installed else "휴대용"))
+	update_label = _label(column,game.updates.status,Vector2.ZERO,18)
+	update_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	update_progress = ProgressBar.new(); column.add_child(update_progress)
+	update_progress.max_value = 1; update_progress.custom_minimum_size.y = 22
+	button("업데이트 확인",func(): game.updates.check_for_updates())
+	button("다운로드하고 설치",confirm_update,game.updates.latest.is_empty())
+	button("다운로드 취소",func(): game.updates.cancel_download())
+	var values: Dictionary = game.store.data.settings
+	button("시작할 때 확인: "+("켜짐" if values.get("auto_updates",true) else "꺼짐"),func(): values.auto_updates=not values.get("auto_updates",true); game.store.write(); updates_menu())
+	button("돌아가기",func(): game.updates.cancel_download(); settings())
+	refresh_updates()
+
+func refresh_updates():
+	if mode!="updates" or not is_instance_valid(update_label): return
+	update_label.text = game.updates.status
+	update_progress.visible = game.updates.state=="downloading"
+	update_progress.value = game.updates.progress()
+	for child in column.get_children():
+		if child is Button:
+			if child.text=="다운로드하고 설치": child.disabled=game.updates.latest.is_empty() or game.updates.busy()
+			if child.text=="업데이트 확인": child.disabled=game.updates.busy()
+
+func confirm_update():
+	if game.updates.latest.is_empty() or game.updates.busy(): return
+	mode = "update_confirm"
+	clear("새 버전을 설치할까요?", "버전 "+str(game.updates.latest.version)+"을 다운로드합니다.\n진행을 저장하고 게임을 종료한 뒤 설치합니다.\n"+("설치 후 게임을 다시 실행합니다. 실패하면 이전 버전으로 복구합니다." if game.updates.installed else "설치 화면에서 설치 위치를 확인할 수 있습니다. 기존 진행은 유지됩니다."))
+	button("다운로드하고 설치",func(): game.updates.begin_install(); updates_menu())
+	button("나중에",updates_menu).grab_focus()
