@@ -1,0 +1,391 @@
+[
+  {
+    "id": 1,
+    "title": "김 대리, 나 좀 밀어봐",
+    "brief": "부장님을 업무석까지 모셔 주세요. 넘어져도 다시 태우면 됩니다.",
+    "start": [
+      -24,
+      14
+    ],
+    "route": [
+      {
+        "at": [
+          -24,
+          6
+        ],
+        "label": "복도로 나가기",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          -24,
+          0
+        ],
+        "label": "첫 코너 전에 감속",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          -12,
+          0
+        ],
+        "label": "업무 구역으로",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          -12,
+          -10
+        ],
+        "label": "부장님 업무석",
+        "checkpoint": false
+      }
+    ],
+    "budget": -1,
+    "min_coffee": 0,
+    "target_time": 210,
+    "damage_budget": 30000,
+    "intro": "김 대리, 저기까지만. 나 무릎이 좀 그래서.",
+    "outro": "역시 젊으니까 빠르네.",
+    "events": {
+      "1": "의자 조금만 왼쪽."
+    }
+  },
+  {
+    "id": 2,
+    "title": "커피 식겠다",
+    "brief": "E로 커피를 채우고 회의실까지 20% 이상 남겨 주세요.",
+    "start": [
+      -12,
+      14
+    ],
+    "route": [
+      {
+        "at": [
+          -12,
+          2
+        ],
+        "label": "탕비실 출구",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          0,
+          0
+        ],
+        "label": "회의실 방향",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          0,
+          -13
+        ],
+        "label": "회의실 지정석",
+        "checkpoint": false
+      }
+    ],
+    "budget": -1,
+    "min_coffee": 20,
+    "target_time": 300,
+    "damage_budget": 45000,
+    "requires_refill": true,
+    "intro": "내 건 꽉 채워 줘. 뚜껑은 답답해서 싫어.",
+    "outro": "난 원래 연하게 먹어.",
+    "events": {
+      "1": "커피가 흔들리네. 바닥이 이상한가?"
+    }
+  },
+  {
+    "id": 3,
+    "title": "문 좀 잡아줘",
+    "brief": "문을 열고 자료실에 갔다가 휴대폰을 챙기러 돌아오세요.",
+    "start": [
+      0,
+      12
+    ],
+    "route": [
+      {
+        "at": [
+          0,
+          0
+        ],
+        "label": "회의실 문 통과",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          12,
+          0
+        ],
+        "label": "자료실 방향",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          12,
+          -12
+        ],
+        "label": "자료실 도착",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          12,
+          0
+        ],
+        "label": "복도로 돌아가기",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          0,
+          0
+        ],
+        "label": "회의실 문 앞으로",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          0,
+          12
+        ],
+        "label": "휴대폰 두고 온 자리",
+        "checkpoint": false
+      }
+    ],
+    "budget": -1,
+    "min_coffee": 0,
+    "target_time": 420,
+    "damage_budget": 60000,
+    "intro": "문 좀 잡아줘. 의자가 걸리잖아.",
+    "outro": "휴대폰? 아, 주머니에 있었네.",
+    "events": {
+      "3": "아, 내 휴대폰. 아까 거기로 다시 가자."
+    }
+  },
+  {
+    "id": 4,
+    "title": "회의 시작했대",
+    "brief": "각 구간을 60초 안에 통과하세요. 코너 전에 미리 감속하세요.",
+    "start": [
+      -24,
+      14
+    ],
+    "route": [
+      {
+        "at": [
+          -24,
+          0
+        ],
+        "label": "첫 복도",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          0,
+          0
+        ],
+        "label": "첫 체크포인트",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          24,
+          0
+        ],
+        "label": "동쪽 복도",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          24,
+          -13
+        ],
+        "label": "두 번째 체크포인트",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          12,
+          -13
+        ],
+        "label": "회의실 앞",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          0,
+          -13
+        ],
+        "label": "긴급 회의 지정석",
+        "checkpoint": false
+      }
+    ],
+    "budget": 60,
+    "min_coffee": 0,
+    "target_time": 175,
+    "damage_budget": 30000,
+    "intro": "회의 시작했대. 근데 서두르지는 말고, 빨리 가.",
+    "outro": "시간 맞춰 오셨네요.",
+    "events": {
+      "2": "김 대리, 운전이 좀 거치네."
+    }
+  },
+  {
+    "id": 5,
+    "title": "바람 좀 쐬자",
+    "brief": "청소 중인 복도와 송풍 구간을 지나세요. 후반에는 낙하 금지입니다.",
+    "start": [
+      12,
+      14
+    ],
+    "route": [
+      {
+        "at": [
+          12,
+          2
+        ],
+        "label": "미끄러운 복도",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          24,
+          0
+        ],
+        "label": "송풍 구간 준비",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          24,
+          -10
+        ],
+        "label": "부장님 낙하 금지 구간",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          18,
+          -14
+        ],
+        "label": "서버실 앞 지정석",
+        "checkpoint": false
+      }
+    ],
+    "budget": -1,
+    "min_coffee": 0,
+    "target_time": 420,
+    "damage_budget": 60000,
+    "strict_after": 2,
+    "hazards": true,
+    "intro": "에어컨 바람 좀 쐬자. 직접 가면 더 시원하겠지.",
+    "outro": "역시 회사 공기가 좋아.",
+    "events": {
+      "2": "여기부터는 나 떨어뜨리지 마. 바닥 닦았잖아."
+    }
+  },
+  {
+    "id": 6,
+    "title": "마지막으로 딱 하나만",
+    "brief": "커피를 채우고 마지막 업무를 마치세요. 구간당 90초, 마지막 커피 10%.",
+    "start": [
+      -12,
+      14
+    ],
+    "route": [
+      {
+        "at": [
+          -12,
+          0
+        ],
+        "label": "커피 들고 출발",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          0,
+          0
+        ],
+        "label": "문 통과",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          0,
+          -12
+        ],
+        "label": "회의실 경유",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          12,
+          -12
+        ],
+        "label": "자료실 경유",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          12,
+          0
+        ],
+        "label": "동쪽 복도",
+        "checkpoint": true,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          24,
+          0
+        ],
+        "label": "마지막 코너",
+        "checkpoint": false,
+        "radius": 0.55
+      },
+      {
+        "at": [
+          24,
+          12
+        ],
+        "label": "임원실 지정석",
+        "checkpoint": false
+      }
+    ],
+    "budget": 90,
+    "min_coffee": 10,
+    "target_time": 260,
+    "damage_budget": 90000,
+    "requires_refill": true,
+    "hazards": true,
+    "intro": "마지막으로 딱 하나만. 이것만 하면 퇴근해.",
+    "outro": "수고했어. 내일도 부탁해.",
+    "events": {
+      "4": "다 왔어. 진짜 마지막이야."
+    }
+  }
+]
