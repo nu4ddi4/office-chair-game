@@ -33,8 +33,9 @@ def main():
     if not version.strip().startswith("4.7.2.stable"):
         raise RuntimeError("Use Godot 4.7.2 stable.")
     run(["node", "scripts/godot-asset-test.mjs"])
-    run([args.godot, "--headless", "--path", str(ROOT / "godot"), "--editor", "--quit"])
-    command = [args.godot, "--path", str(ROOT / "godot"), "--rendering-method", "gl_compatibility"]
+    run([args.godot, "--headless", "--path", str(ROOT / "godot"), "--editor", "--import"])
+    command = [args.godot, "--path", str(ROOT / "godot"), "--rendering-method", "gl_compatibility",
+               "--audio-driver", "Dummy"]
     if not args.rendered:
         command.append("--headless")
     command += ["--script", "res://tests/map_smoke.gd", "--", "--capture-dir", str(directory)]
