@@ -7,3 +7,11 @@ godot/builds/
 map-results/
 godot/assets/models/Interior_07_Godot_*.jpg
 godot/assets/models/Interior_07_Godot_*.png
+godot/assets/models/Interior_07_Godot_*.jpg.import
+godot/assets/models/Interior_07_Godot_*.png.import
+
+# Local caches from the retired project may remain when switching branches.
+.browsers/
+.npm-cache/
+node_modules/
+test-results/
