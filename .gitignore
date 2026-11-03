@@ -1,33 +1,17 @@
-.cache/
-.pytest_cache/
-.venv/
-.env
-.env.*
-!.env.example
 .DS_Store
 *.log
 __pycache__/
 *.py[cod]
 godot/.godot/
 godot/builds/
-godot/tests/results/
-godot/prototype/tests/results/
-prototype-dist/
-prototype-android-dist/
-*.keystore
-*.jks
-*.p12
-*.pfx
+map-results/
 godot/assets/models/Interior_07_Godot_*.jpg
 godot/assets/models/Interior_07_Godot_*.png
-godot/assets/models/Investigation_Environment_*.jpg
-godot/assets/models/Investigation_Environment_*.png
-godot/assets/models/Investigation_Environment_*.jpg.import
-godot/assets/models/Investigation_Environment_*.png.import
+godot/assets/models/Interior_07_Godot_*.jpg.import
+godot/assets/models/Interior_07_Godot_*.png.import
 
-# Local caches retained when switching to earlier revisions
-node_modules/
-.npm-cache/
+# Local caches from the retired project may remain when switching branches.
 .browsers/
-playwright-report/
+.npm-cache/
+node_modules/
 test-results/

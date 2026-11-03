@@ -26,7 +26,7 @@ func setup(node: Node3D, bounds: Array, actor: LabPlayer, angle: float):
 	collision_mask = 8
 
 func get_interaction_prompt() -> String:
-	return "E · 문 열기" if desired_angle == 0 else "E · 문 닫기"
+	return "F  Open door" if desired_angle == 0 else "F  Close door"
 
 func inspect():
 	desired_angle = open_angle if desired_angle == 0 else 0.0

@@ -1,11 +1,10 @@
 config_version=5
 
 [application]
-config/name="Security Lab · Native"
-run/main_scene="res://prototype/main.tscn"
+config/name="Office Map"
+run/main_scene="res://scenes/office.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
-config/description="A terminal comedy puzzle game."
-config/version="0.8.1-beta.1"
+config/description="Office map foundation for a new game."
 
 [display]
 window/size/viewport_width=1600
@@ -33,9 +32,3 @@ common/physics_ticks_per_second=120
 
 [filesystem]
 import/blender/enabled=false
-
-[debug]
-file_logging/enable_file_logging=true
-file_logging/log_path="user://logs/godot.log"
-file_logging/max_log_files=3
-gdscript/warnings/untyped_declaration=0
