@@ -1,0 +1,50 @@
+class_name ChaosDoor
+extends Node3D
+
+var leaf: RigidBody3D
+var hinge: HingeJoint3D
+var closing = false
+var opened_for = 0.0
+var origin_yaw = 0.0
+
+func build(at: Vector3, yaw: float, width = 1.6, auto_close = true):
+	global_position = at
+	rotation.y = yaw
+	origin_yaw = yaw
+	closing = auto_close
+	var mount = StaticBody3D.new()
+	mount.collision_layer = 0
+	add_child(mount)
+	leaf = ChaosShapes.rigid(self,Vector3(width/2,1.1,0),Vector3(width-.06,2.2,.075),18,Color("a9bbbd"))
+	leaf.collision_layer = ChaosTuning.DOOR
+	leaf.name = "DoorLeaf"
+	leaf.add_to_group("chaos_grabbable")
+	leaf.set_meta("grip_points",[Vector3(width/2-.14,0,-.09),Vector3(width/2-.14,0,.09)])
+	ChaosShapes.box(leaf,Vector3(width/2-.14,0,-.08),Vector3(.06,.18,.07),Color("edbb55"))
+	ChaosShapes.box(leaf,Vector3(0,.22,-.045),Vector3(width-.25,1.15,.01),Color("d0e0de"))
+	hinge = HingeJoint3D.new()
+	add_child(hinge)
+	hinge.position = Vector3(0,1.1,0)
+	hinge.rotation.x = PI/2
+	hinge.node_a = hinge.get_path_to(mount)
+	hinge.node_b = hinge.get_path_to(leaf)
+	hinge.set_flag(HingeJoint3D.FLAG_USE_LIMIT,true)
+	hinge.set_param(HingeJoint3D.PARAM_LIMIT_LOWER,-1.7)
+	hinge.set_param(HingeJoint3D.PARAM_LIMIT_UPPER,1.7)
+
+func interact(from: Vector3):
+	var side = signf((global_basis.inverse()*(from-global_position)).z)
+	leaf.apply_torque_impulse(Vector3.UP*side*25)
+	opened_for = 2.5
+
+func _physics_process(delta):
+	if leaf == null: return
+	opened_for = maxf(0,opened_for-delta)
+	if closing and opened_for<=0:
+		var angle = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
+		leaf.apply_torque(Vector3.UP*(-angle*8.0-leaf.angular_velocity.y*3.0))
+
+func restore():
+	leaf.global_transform = global_transform*Transform3D(Basis.IDENTITY,Vector3(leaf.get_child(0).shape.size.x/2+.03,1.1,0))
+	leaf.linear_velocity = Vector3.ZERO; leaf.angular_velocity = Vector3.ZERO
+	leaf.reset_physics_interpolation()
