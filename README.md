@@ -50,7 +50,7 @@ python3 scripts/build-game.py --godot /path/to/Godot-4.7.2
 python scripts/build-game.py --godot /path/to/Godot-4.7.2 --verify
 ```
 
-검사 결과와 화면은 `chaos-results/`, EXE·크레딧·체크섬은 `chaos-dist/`에 생성합니다. CI는 Linux 검사 후 실제 Windows에서 내보낸 EXE를 검증하고 다운로드 가능한 아티팩트를 만듭니다. 자동 공개 릴리스·자동 업데이트·Android 배포는 없습니다.
+검사 결과와 화면은 `chaos-results/`, EXE·크레딧·체크섬은 `chaos-dist/`에 생성합니다. CI는 Linux 검사 후 실제 Windows에서 내보낸 EXE를 검증하고 다운로드 가능한 아티팩트를 만듭니다. 자동 공개 릴리스·자동 업데이트·Android 배포는 없습니다. 명시적으로 요청한 정식 릴리스는 main의 수동 `Release` 워크플로로 게시합니다. 성공한 `Test` 실행의 Windows 아티팩트와 main의 게임 입력이 같은지 확인하고 기존 EXE를 그대로 재사용합니다.
 
 ## 맵 제작과 개발
 
@@ -74,3 +74,13 @@ godot --path godot -- --chaos-test --blockout --mission 1
 ## 기존 게임 보관
 
 기존 조사·터미널 게임은 [legacy/pre-reboot](https://github.com/nu4ddi4/security-lab-game/tree/legacy/pre-reboot)에 있습니다. 기존 맵 원본 `Security_Lab_Interior_07.blend`와 `Interior_07_Godot.glb`는 자산 원천으로 보존하며, 새 게임은 별도 맵을 사용합니다. 원본 맵 확인 장면 `godot/scenes/office.tscn`은 회귀 검사와 에셋 확인용이며 새 게임 메뉴에 포함하지 않습니다.
+
+## 정식 릴리스
+
+`main` 승격은 PR로 진행합니다. 승격 후 성공한 `Test` 실행 ID를 지정해 게시합니다. 태그는 프로젝트 버전과 일치하는 `OfficeChairChaos-vX.Y.Z`이며 기존 SecurityLab 태그와 릴리스는 보존합니다.
+
+```sh
+gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.0 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
+```
+
+게시 전 검증된 EXE의 SHA-256을 확인하고 EXE·ZIP·크레딧·라이선스·체크섬을 첨부합니다. ZIP은 압축을 풀어 바로 실행할 수 있습니다. 공개된 릴리스를 같은 태그로 덮어쓰지 않습니다.
