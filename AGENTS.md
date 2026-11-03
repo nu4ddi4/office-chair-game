@@ -16,7 +16,8 @@
 - 직원·부장님의 충돌 반응과 힘을 통한 손 잡기를 유지한다. 실제 플레이에서 강체 위치를 매 프레임 강제로 덮어쓰지 않는다.
 - 원본 사무실 GLB·Blender·출처는 보존한다. 새 맵은 Office_Chaos.blend와 Office_Chaos.glb로 제작하며 LFS를 사용한다. source 복원 후 Blender 생성 스크립트로 재현한다.
 - 새 저장·설정은 OfficeChairChaos 사용자 폴더에만 쓴다. 기존 게임의 저장·업데이트·Android 패키지를 사용하지 않는다.
-- 첫 배포는 Windows 휴대용 EXE와 체크섬이다. Test CI는 아티팩트만 만든다. 사용자가 명시적으로 요청한 공개 릴리스는 main 전용 수동 Release 워크플로에서 검증된 Windows 아티팩트를 재사용해 게시한다. 옛 제품 업데이트는 게시하지 않는다.
+- 배포 파일은 Windows 사용자별 설치 EXE·휴대용 ZIP·체크섬 세 개다. 크레딧·엔진·자산·폰트의 고지를 LICENSES.txt 하나로 묶되 전문을 보존한다. 게임에서도 전문을 열 수 있어야 한다.
+- 새 제품의 공개 안정 버전만 확인한다. 설치는 사용자 동의·진행 저장·SHA-256 검증 후 수행하며, 설치형 업데이트 실패 시 이전 실행 파일을 복구한다. Test CI는 아티팩트만 만든다. 명시적으로 요청한 공개 릴리스는 main 전용 수동 Release 워크플로에서 검증된 Windows 아티팩트를 재사용해 게시한다. 옛 제품 업데이트는 게시하지 않는다.
 - PC 키보드·마우스가 첫 버전의 기준이다. 협동·온라인·모바일·범용 파괴·경제 시스템은 범위 밖이다.
 
 ## 검증
@@ -27,4 +28,5 @@
 - 검사기는 원본 보호 지오메트리·새 맵 배치·미션 경로 검사도 포함한다. 원본 실행 회귀는 scripts/test-map.py로 확인한다.
 - 실제 경로의 강체 충돌 검사는 godot/chaos/tests/drive.gd다. 의자에 제한된 힘을 가해 경로·문을 검사하며 플레이어 숙련도나 재미를 입증하는 검사는 아니다.
 - CI 변경은 actionlint. 문서는 링크·git diff --check. Windows EXE 실행은 Windows의 scripts/build-game.py --verify 또는 CI로 검증한다.
+- 업데이트 규칙·동의·저장·다운로드 검사는 --suite updates. Windows CI는 고정된 Inno Setup으로 설치 프로그램을 만들고 tests/windows/installer-update.ps1을 Windows PowerShell에서 실행해 설치·업데이트·해시 거부·복구·제거와 저장 보존을 확인한다. 릴리스 포장·구버전 중복 파일 정리는 python3 -m unittest discover -s tests/release로 검사한다.
 - 성능 목표·30~60분 분량·재미는 자동 검증으로 통과했다고 주장하지 않는다. 실제 사람의 플레이와 지정 하드웨어 측정이 필요하다.

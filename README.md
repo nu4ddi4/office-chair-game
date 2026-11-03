@@ -2,7 +2,15 @@
 
 풍선인형처럼 휘청거리는 직원이 바퀴 의자에 앉은 부장님을 밀고 사무실의 심부름을 수행하는 PC용 3인칭 물리 코미디 게임입니다. 직원·부장님의 15강체 인형, 양손 잡기, 물리 문, 커피, 연결된 6개 미션과 체크포인트를 제공합니다.
 
-## 실행
+## 다운로드·설치·업데이트
+
+[최신 릴리즈](https://github.com/nu4ddi4/office-zirral/releases/latest)의 **OfficeChairChaos-Setup.exe**를 실행하세요. 관리자 권한 없이 사용자 계정에 설치하며 시작 메뉴와 제거 기능을 제공합니다. 설치가 필요 없으면 Windows-x64.zip을 압축 해제해 실행하세요.
+
+설치형은 게임 시작 시 새 안정 버전을 알리고 설정 → 업데이트에서 설치할 수 있습니다. 동의 후 진행 저장·다운로드·SHA-256 검증·설치·재실행을 수행하며 실행 확인에 실패하면 이전 파일로 복구합니다. 자동 확인은 설정에서 끌 수 있고, 오프라인에서도 게임을 계속할 수 있습니다. 휴대용 버전은 동의 후 설치 프로그램을 엽니다.
+
+릴리즈 첨부는 설치 EXE·휴대용 ZIP·SHA256SUMS.txt 세 개입니다. 자산·엔진·폰트의 크레딧과 라이선스 전문은 패키지의 LICENSES.txt 및 게임의 라이선스 화면에 있습니다. 제거해도 진행·설정은 보존합니다.
+
+## 소스에서 실행
 
 Godot **4.7.2 stable**과 Git LFS가 필요합니다.
 
@@ -50,11 +58,13 @@ python3 scripts/test-game.py --godot /path/to/Godot-4.7.2 --rendered
 python3 scripts/test-map.py --godot /path/to/Godot-4.7.2
 # Windows 내보내기 템플릿 설치 후 휴대용 EXE 생성
 python3 scripts/build-game.py --godot /path/to/Godot-4.7.2
-# Windows에서 내보낸 EXE의 실행까지 확인
-python scripts/build-game.py --godot /path/to/Godot-4.7.2 --verify
+# Windows에서 고정된 Inno Setup 6.7.3으로 설치형 생성·실행 검사
+python scripts/build-game.py --godot /path/to/Godot-4.7.2 --verify --installer --iscc /path/to/ISCC.exe
+# Windows PowerShell에서 설치·업데이트·복구·제거 검사
+powershell -NoProfile -File tests/windows/installer-update.ps1
 ```
 
-검사 결과와 화면은 `chaos-results/`, EXE·크레딧·체크섬은 `chaos-dist/`에 생성합니다. CI는 Linux 검사 후 실제 Windows에서 내보낸 EXE를 검증하고 다운로드 가능한 아티팩트를 만듭니다. 자동 공개 릴리스·자동 업데이트·Android 배포는 없습니다. 명시적으로 요청한 정식 릴리스는 main의 수동 `Release` 워크플로로 게시합니다. 성공한 `Test` 실행의 Windows 아티팩트와 main의 게임 입력이 같은지 확인하고 기존 EXE를 그대로 재사용합니다.
+검사 결과와 화면은 `chaos-results/`, EXE·설치 프로그램·통합 라이선스·체크섬은 `chaos-dist/`에 생성합니다. CI는 Linux 검사 후 실제 Windows PowerShell에서 설치·업데이트·실패 복구·제거까지 검증하고 다운로드 가능한 아티팩트를 만듭니다. 자동 공개 릴리스·Android 배포는 없습니다. 명시적으로 요청한 정식 릴리스는 main의 수동 `Release` 워크플로로 게시합니다. 성공한 `Test` 실행의 Windows 아티팩트와 main의 게임 입력이 같은지 확인하고 기존 EXE를 그대로 재사용합니다.
 
 ## 맵 제작과 개발
 
@@ -77,7 +87,7 @@ godot --path godot -- --chaos-test --blockout --mission 1
 
 ## 기존 게임 보관
 
-기존 조사·터미널 게임은 [legacy/pre-reboot](https://github.com/nu4ddi4/security-lab-game/tree/legacy/pre-reboot)에 있습니다. 기존 맵 원본 `Security_Lab_Interior_07.blend`와 `Interior_07_Godot.glb`는 자산 원천으로 보존하며, 새 게임은 별도 맵을 사용합니다. 원본 맵 확인 장면 `godot/scenes/office.tscn`은 회귀 검사와 에셋 확인용이며 새 게임 메뉴에 포함하지 않습니다.
+기존 조사·터미널 게임은 [legacy/pre-reboot](https://github.com/nu4ddi4/office-zirral/tree/legacy/pre-reboot)에 있습니다. 기존 맵 원본 `Security_Lab_Interior_07.blend`와 `Interior_07_Godot.glb`는 자산 원천으로 보존하며, 새 게임은 별도 맵을 사용합니다. 원본 맵 확인 장면 `godot/scenes/office.tscn`은 회귀 검사와 에셋 확인용이며 새 게임 메뉴에 포함하지 않습니다.
 
 ## 정식 릴리스
 
@@ -87,4 +97,4 @@ godot --path godot -- --chaos-test --blockout --mission 1
 gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.1 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
 ```
 
-게시 전 검증된 EXE의 SHA-256을 확인하고 EXE·ZIP·크레딧·라이선스·체크섬을 첨부합니다. ZIP은 압축을 풀어 바로 실행할 수 있습니다. 공개된 릴리스를 같은 태그로 덮어쓰지 않습니다.
+게시 전 검증된 게임·설치 EXE·라이선스의 SHA-256을 확인하고 설치 EXE·휴대용 ZIP·체크섬만 첨부합니다. ZIP에는 게임과 통합 라이선스가 들어갑니다. 공개된 같은 태그의 게임 파일은 덮어쓰지 않습니다. `cleanup_old_assets=true`는 0.1.0의 원본 ZIP·내부 실행 파일·라이선스 검증 후 중복 첨부만 정리하고 체크섬 목록을 갱신합니다.
