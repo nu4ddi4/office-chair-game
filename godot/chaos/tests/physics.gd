@@ -61,8 +61,9 @@ func run_tests():
 	game._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 	check(paused and not Input.is_action_pressed("chaos_forward"),"focus loss clears movement and pauses")
 	game.retry(); await frames(90)
-	var left=game.player.try_grab(0,game.chair)
-	var right=game.player.try_grab(1,game.chair)
+	game.interact()
+	var left=game.player.grips[0]==game.chair
+	var right=game.player.grips[1]==game.chair
 	check(left and right,"both hands can reach rear chair handles")
 	Input.action_press("chaos_forward"); await frames(300); Input.action_release("chaos_forward")
 	metrics.push_distance=14-game.chair.global_position.z
@@ -92,6 +93,15 @@ func run_tests():
 			check(game.context().get("kind","")=="coffee","mission %d refill prompt" % id)
 			game.interact(); check(game.run.refilled and game.coffee.amount==100,"mission %d refill" % id)
 	game.ui.settings(); await capture("05-settings")
+	game.ui.updates_menu(); await capture("09-updates")
+	var update_requests = [0]
+	game.updates.request_started.connect(func(_url): update_requests[0]+=1)
+	game.updates.latest = {"version":"0.2.0"}
+	game.ui.confirm_update()
+	check(game.ui.mode=="update_confirm" and update_requests[0]==0,"update confirmation does not download before approval")
+	game.ui.updates_menu()
+	check(update_requests[0]==0 and not game.updates.busy(),"declining an update keeps the current game")
+	game.updates.latest = {}; game.ui.settings()
 	game.rebind("forward",KEY_UP)
 	check(game.keycode("forward")==KEY_UP,"key rebinding")
 	game.apply_settings()
