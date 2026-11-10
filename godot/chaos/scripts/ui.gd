@@ -479,19 +479,20 @@ func _reveal(rows: Array[Control], success: bool):
 	var verdict = ChaosStamp.new().setup("승인" if success else "반려",210,false,ChaosStyle.STAMP if success else ChaosStyle.INK,-.16 if success else .12)
 	stamp_layer.add_child(verdict)
 	verdict.modulate.a = 0
-	var tween = create_tween()
+	# Bound to the stamp: leaving the report screen frees it and cancels the whole sequence.
+	var tween = verdict.create_tween()
 	for row in rows: tween.tween_property(row,"modulate:a",1.0,.12)
 	tween.tween_interval(.12)
 	tween.tween_callback(func():
 		if not is_instance_valid(verdict): return
 		verdict.position = sheet.global_position+Vector2(sheet.size.x-262,sheet.size.y-150)
 		verdict.scale = Vector2(2.4,2.4)
-		var slam = create_tween().set_parallel().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		var slam = verdict.create_tween().set_parallel().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		slam.tween_property(verdict,"modulate:a",.92,.12)
 		slam.tween_property(verdict,"scale",Vector2.ONE,.2)
 		slam.chain().tween_callback(func():
 			game.audio.play("impact",.7)
-			var shake = create_tween()
+			var shake = verdict.create_tween()
 			var base = frame.offset_left
 			for k in range(4): shake.tween_property(frame,"offset_left",base+(6 if k%2==0 else -6),.03)
 			shake.tween_property(frame,"offset_left",base,.03)))
