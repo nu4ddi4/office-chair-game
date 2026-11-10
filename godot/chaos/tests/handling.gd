@@ -52,6 +52,49 @@ func approach(walker: ChaosWalker, speed: float, frames_max: int, shot = "") -> 
 	walker.bumped.disconnect(hit)
 	return result
 
+# Coffee rocks like a spring: jerking in time with the wave spills even at normal
+# speed, and reversing makes the casters flop round with a sideways shove.
+func rhythm_and_caster_checks():
+	await fixture(); game.interact(); await frames(2)
+	key("forward"); await frames(240)
+	for i in range(4):
+		key("forward",false); key("back"); await frames(28); key("back",false); key("forward"); await frames(28)
+	metrics.rhythm_slosh = game.coffee.peak_slosh; metrics.rhythm_coffee = game.coffee.amount
+	check(metrics.rhythm_slosh>1.2 and game.coffee.amount<97,"jerking in time with the wave spills coffee at normal speed")
+	game.clear_inputs()
+	await fixture(); game.interact(); await frames(2)
+	key("forward"); await frames(240); key("forward",false); key("back")
+	var flop = 0.0; var shove = 0.0
+	for i in range(120):
+		await frames(1)
+		flop = maxf(flop,game.chair.caster_misalign)
+		shove = maxf(shove,absf(game.chair.linear_velocity.dot(game.chair.global_basis.x)))
+	metrics.caster_flop_deg = rad_to_deg(flop); metrics.caster_shove = shove
+	check(flop>2.5 and shove>.2,"reversing flops the casters round with a sideways shove")
+	game.clear_inputs()
+
+# Ramming a desk wakes its props, they settle, cost money, and a restore puts them back.
+func clutter_checks():
+	var clutter: ChaosClutter = game.office.clutter
+	check(clutter.desks.size()>=40 and clutter.items.size()>=200,"desk props are registered")
+	await fixture(Vector3(-23.4,.015,-17.0),PI/2); game.interact(); await frames(2)
+	key("forward"); key("sprint")
+	for i in range(240):
+		await frames(1)
+		if clutter.knocks>0: break
+	await frames(300); game.clear_inputs()
+	var moved = 0
+	for item in clutter.items:
+		if item.body!=null and item.mesh.global_position.distance_to(item.xform.origin)>.15: moved += 1
+	metrics.clutter_moved = moved; metrics.clutter_damage = game.run.damage
+	check(moved>=3 and game.run.damage>0,"ramming a desk knocks its props off and costs money")
+	check(clutter.awake_count()<=ChaosClutter.MAX_AWAKE,"woken props settle within the body budget")
+	game.retry(); await frames(3)
+	var home = 0
+	for item in clutter.items:
+		if item.body==null and item.mesh.global_position.distance_to(item.xform.origin)<.001: home += 1
+	check(home==clutter.items.size(),"a checkpoint restore puts every desk prop back")
+
 func traffic_checks():
 	game.clear_inputs(); game.store.data.unlocked = 6; game.start_mission(4); await frames(30)
 	check(game.office.walkers.size()==3,"mission traffic spawns its coworkers")
@@ -148,6 +191,8 @@ func run_tests():
 	game.player.release_all()
 	await frames(240)
 	check(game.coffee.amount>98,"idle coffee is not drained by solver noise")
+	await rhythm_and_caster_checks()
+	await clutter_checks()
 	await traffic_checks()
 	print("CHAOS_HANDLING ",JSON.stringify({"passed":failures.is_empty(),"checks":checks,"failures":failures,"metrics":metrics}))
 	game.clear_inputs(); paused = false; game.queue_free(); await process_frame; await process_frame

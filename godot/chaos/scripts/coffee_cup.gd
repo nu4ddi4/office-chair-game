@@ -27,20 +27,18 @@ func setup(source: ChaosCoffee, vehicle: RigidBody3D):
 
 func _on_spilled(amount: float):
 	if drops.size()>40: return
-	var side = 1.0 if tilt<0 else -1.0
+	var side = 1.0 if tilt>=0 else -1.0
 	for i in range(clampi(int(amount*3)+1,1,3)):
 		var x = INSIDE.position.x+(INSIDE.size.x+4 if side>0 else -4)
 		drops.append({"p":Vector2(x,INSIDE.position.y-2),"v":Vector2(side*randf_range(25,70),randf_range(-60,-10)),"life":.9})
 
 func _process(delta):
 	if coffee==null or not is_visible_in_tree(): return
-	var forward = -chair.global_basis.z; forward.y = 0
-	var push = coffee.filtered_acceleration.dot(forward.normalized()) if forward.length()>.01 else 0.0
-	# Liquid lags behind the push: accelerating tips it back (left), braking forward (right).
-	var target = clampf(-push*.22,-1,1)
-	tilt_velocity += ((target-tilt)*55-tilt_velocity*6)*delta
-	tilt = clampf(tilt+tilt_velocity*delta,-1.3,1.3)
-	phase += delta*(5.5+coffee.fullness()*5)
+	# The mug is seen from the side with the chair's front on the right: the crest's
+	# forward offset tilts the surface, its sideways offset shows as a swirl.
+	tilt = coffee.slosh_offset.y/coffee.rim()
+	tilt_velocity = absf(coffee.slosh_offset.x)/coffee.rim()
+	phase += delta*TAU*ChaosTuning.COFFEE_SLOSH_HZ
 	flash = flash+delta*10 if coffee.fullness()>=ChaosTuning.COFFEE_SLOSH_WARN else 0.0
 	for drop in drops:
 		drop.v.y += 420*delta; drop.p += drop.v*delta; drop.life -= delta
@@ -50,8 +48,8 @@ func _process(delta):
 func _surface(level_y: float, height: float, x: float) -> float:
 	var half = INSIDE.size.x/2
 	var u = (x-INSIDE.position.x-half)/half
-	var wave = sin(phase+u*2.6)*.38+sin(phase*1.7-u*4.1)*.12
-	return level_y-height*(clampf(tilt,-1,1)*u+wave)/1.3
+	var swirl = sin(phase+u*2.6)*.35+sin(phase*1.7-u*4.1)*.08
+	return level_y-height*(clampf(tilt,-1.4,1.4)*u+minf(tilt_velocity,1.4)*swirl+.04*sin(phase*.5+u*3))
 
 func _draw():
 	if coffee==null: return
@@ -61,7 +59,7 @@ func _draw():
 	# A full mug still leaves headroom so the slosh can be seen reaching the rim.
 	var level_y = bottom-(bottom-top)*.66*full
 	var headroom = level_y-top
-	var height = clampf(coffee.fullness(),0,1.4)*headroom
+	var height = headroom
 	var heat = clampf((coffee.temperature-ChaosTuning.COFFEE_AMBIENT)/(ChaosTuning.COFFEE_HOT-ChaosTuning.COFFEE_AMBIENT),0,1)
 	var liquid = COLD.lerp(HOT,heat) if show_heat else HOT
 	# Inner shadow of the mug.

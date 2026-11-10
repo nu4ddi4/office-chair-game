@@ -23,6 +23,11 @@ jobs:
         run: python3 -m unittest discover -s tests/release
       - name: Fetch runtime offices
         run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb,godot/assets/models/Office_Chaos.glb" --exclude=""
+      - name: Reuse the Godot import cache
+        uses: actions/cache@v4
+        with:
+          path: godot/.godot
+          key: godot-import-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**', 'godot/**/*.import', 'godot/project.godot') }}
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.7.2
@@ -41,8 +46,9 @@ jobs:
           path: chaos-results/
           if-no-files-found: ignore
           retention-days: 14
+  # Packaging does not depend on the test results, so it runs alongside them.
+  # Release still requires the whole Test run (every job) to succeed.
   windows:
-    needs: test
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -51,6 +57,11 @@ jobs:
           lfs: false
       - name: Fetch runtime offices for import
         run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb,godot/assets/models/Office_Chaos.glb" --exclude=""
+      - name: Reuse the Godot import cache
+        uses: actions/cache@v4
+        with:
+          path: godot/.godot
+          key: godot-import-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**', 'godot/**/*.import', 'godot/project.godot') }}
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.7.2
@@ -82,7 +93,6 @@ jobs:
           path: chaos-dist/
           retention-days: 14
   linux:
-    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -91,6 +101,11 @@ jobs:
           lfs: false
       - name: Fetch runtime offices for import
         run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb,godot/assets/models/Office_Chaos.glb" --exclude=""
+      - name: Reuse the Godot import cache
+        uses: actions/cache@v4
+        with:
+          path: godot/.godot
+          key: godot-import-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**', 'godot/**/*.import', 'godot/project.godot') }}
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.7.2
@@ -102,35 +117,10 @@ jobs:
         run: |
           godot --headless --path godot --editor --import --quit
           python3 scripts/build-linux.py --godot godot --verify --rpm
+      - name: Install, run and remove the RPM on Fedora
+        run: docker run --rm -v "$PWD:/repo:ro" fedora:latest bash /repo/tests/linux/fedora-check.sh
       - uses: actions/upload-artifact@v4
         with:
           name: OfficeChairChaos-Linux-x64
           path: chaos-dist-linux/
           retention-days: 14
-  fedora:
-    needs: linux
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    container: fedora:latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: OfficeChairChaos-Linux-x64
-          path: dist
-      - name: Install the RPM and run the packaged game
-        run: |
-          dnf install -y tar gzip ./dist/office-chair-chaos-*.x86_64.rpm
-          rpm -q office-chair-chaos
-          test -f /usr/share/applications/office-chair-chaos.desktop
-          test -f /usr/share/icons/hicolor/256x256/apps/office-chair-chaos.png
-          office-chair-chaos --headless --audio-driver Dummy --fixed-fps 120 -- --chaos-test --mission 1 --package-smoke 2>&1 | tee rpm-smoke.log
-          grep -q 'CHAOS_PACKAGE_SMOKE {"passed":true}' rpm-smoke.log
-      - name: Run the portable archive
-        run: |
-          tar -xzf dist/OfficeChairChaos-*-linux-x86_64.tar.gz -C /tmp
-          /tmp/OfficeChairChaos/OfficeChairChaos.x86_64 --headless --audio-driver Dummy --fixed-fps 120 -- --chaos-test --mission 1 --package-smoke 2>&1 | tee tar-smoke.log
-          grep -q 'CHAOS_PACKAGE_SMOKE {"passed":true}' tar-smoke.log
-      - name: Remove the package
-        run: |
-          dnf remove -y office-chair-chaos
-          test ! -e /usr/bin/office-chair-chaos

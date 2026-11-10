@@ -70,7 +70,7 @@ python scripts/build-game.py --godot /path/to/Godot-4.7.2 --verify --installer -
 powershell -NoProfile -File tests/windows/installer-update.ps1
 ```
 
-검사 결과와 화면은 `chaos-results/`, EXE·설치 프로그램·통합 라이선스·체크섬은 `chaos-dist/`에 생성합니다. CI는 Linux 검사 후 실제 Windows PowerShell에서 설치·업데이트·실패 복구·제거까지 검증하고 다운로드 가능한 아티팩트를 만듭니다. 자동 공개 릴리스·Android 배포는 없습니다. 명시적으로 요청한 정식 릴리스는 main의 수동 `Release` 워크플로로 게시합니다. 성공한 `Test` 실행의 Windows 아티팩트와 main의 게임 입력이 같은지 확인하고 기존 EXE를 그대로 재사용합니다.
+검사 결과와 화면은 `chaos-results/`, EXE·설치 프로그램·통합 라이선스·체크섬은 `chaos-dist/`에 생성합니다. CI는 Linux 검사와 동시에 실제 Windows PowerShell에서 설치·업데이트·실패 복구·제거까지 검증하고 다운로드 가능한 아티팩트를 만듭니다. 자동 공개 릴리스·Android 배포는 없습니다. 명시적으로 요청한 정식 릴리스는 main의 수동 `Release` 워크플로로 게시합니다. 성공한 `Test` 실행의 Windows 아티팩트와 main의 게임 입력이 같은지 확인하고 기존 EXE를 그대로 재사용합니다.
 
 ## 맵 제작과 개발
 
