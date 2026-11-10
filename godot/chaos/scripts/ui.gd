@@ -507,7 +507,7 @@ func _won(value: int) -> String:
 func say(text: String, seconds = 4.0):
 	subtitle.text = text
 	subtitle_left = seconds
-	game.audio.play("speech")
+	game.audio.speak(text)
 
 # ---------------------------------------------------------------- Per frame
 
