@@ -142,6 +142,8 @@ def main():
             outputs.append(package)
     outputs.append(licenses)
     (DIST/'SHA256SUMS-linux.txt').write_text(''.join(digest(p)+'  '+p.name+'\n' for p in outputs), encoding='utf-8')
+    # The bare executable is already inside both packages; do not ship a third copy.
+    binary.unlink()
     print('Linux build:', ', '.join(p.name for p in outputs), 'version', version)
 
 

@@ -86,7 +86,8 @@ Linux x86_64는 Fedora·RHEL 계열을 기준으로 RPM과 휴대용 tar.gz를 �
 - handling.gd: 실제 E·마우스 손잡이 선택, 카메라와 독립된 전진·조향, 직진 부스트 안정성·속도 차이, 고속 회전/충돌 낙하, 부드러운 주행의 무손실·부스트 출렁임·충돌 쏟음, 한 손 해제, 복도 동료의 보행·저속 접근 시 비켜서기·고속 접근 시 충돌. `--suite scene`에도 포함한다.
 - updates.gd: 버전·제품·출처 검증, 동의 전 다운로드 방지, 체크섬·취소·오프라인·저장 실패, 기존 설정 호환.
 - tests/windows/installer-update.ps1: 실제 설치·실행 확인·업데이트 성공·건강 확인 실패 복구·손상 설치 파일 거부·제거와 저장 보존. Windows PowerShell에서 실행한다.
-- CI linux·fedora: Ubuntu에서 Linux 내보내기·RPM·tar.gz를 만들고 내보낸 실행 파일의 패키지 자체 검사를 통과해야 한다. 이어서 최신 Fedora 컨테이너에서 RPM을 dnf로 설치해 데스크톱 항목·아이콘을 확인하고, 설치된 명령과 tar.gz의 실행 파일로 각각 자체 검사를 통과한 뒤 제거까지 확인한다.
+- CI linux: Ubuntu에서 Linux 내보내기·RPM·tar.gz를 만들고 내보낸 실행 파일의 패키지 자체 검사를 통과해야 한다. 이어서 같은 작업에서 `tests/linux/fedora-check.sh`로 최신 Fedora 컨테이너에서 RPM을 dnf로 설치해 데스크톱 항목·아이콘을 확인하고, 설치된 명령과 tar.gz의 실행 파일로 각각 자체 검사를 통과한 뒤 제거까지 확인한다.
+- CI 구성: test·windows·linux 세 작업은 서로 기다리지 않고 동시에 돈다. Release는 Test 실행 전체의 성공을 요구하므로 검증 기준은 같다. 각 작업은 에셋·import 설정 해시로 Godot import 결과(`godot/.godot`)를 캐시한다. Linux 아티팩트에는 RPM·tar.gz·LICENSES.txt·체크섬만 두고 실행 파일을 따로 넣지 않는다.
 - tests/release: 세 개의 첨부·설치 파일 해시·휴대용 라이선스 및 구버전 정리 전 보존 ZIP 검증.
 - drive.gd: 제한된 힘으로 적재 의자를 경로 위로 이동시켜 실제 지형·문 통과를 검사한다. 시간 제한 미션은 2.4m/s, 온도 미션은 1.9m/s, 나머지는 1.1m/s로 민다. 사람 조작이나 게임 재미 검증과 구분한다.
 - check-chaos-assets.py: 새 GLB의 가구·충돌 노드, 미션별 체크포인트 수, 모든 경로의 벽 여유 검사.
