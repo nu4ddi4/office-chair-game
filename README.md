@@ -8,6 +8,10 @@
 
 설치형은 게임 시작 시 새 안정 버전을 알리고 설정 → 업데이트에서 설치할 수 있습니다. 동의 후 진행 저장·다운로드·SHA-256 검증·설치·재실행을 수행하며 실행 확인에 실패하면 이전 파일로 복구합니다. 자동 확인은 설정에서 끌 수 있고, 오프라인에서도 게임을 계속할 수 있습니다. 휴대용 버전은 동의 후 설치 프로그램을 엽니다.
 
+### Fedora·RHEL 계열 Linux (x86_64)
+
+CI의 `OfficeChairChaos-Linux-x64` 아티팩트에 RPM과 휴대용 tar.gz가 들어 있습니다(정식 릴리스 첨부는 아직 Windows만). Fedora에서는 `sudo dnf install ./office-chair-chaos-<버전>-1.x86_64.rpm` 후 앱 메뉴의 Office Chair Chaos를 실행하거나 `office-chair-chaos`를 입력하세요. 제거는 `sudo dnf remove office-chair-chaos`입니다. 다른 배포판은 tar.gz를 풀어 `OfficeChairChaos.x86_64`를 실행하거나 `install.sh`로 사용자 계정에 설치합니다. Vulkan 또는 OpenGL 3.3 드라이버(Mesa)가 필요합니다. Linux에서는 자동 설치 업데이트 대신 게임의 업데이트 화면이 릴리스 페이지를 엽니다. 진행은 `~/.local/share/OfficeChairChaos`에 저장되며 제거해도 남습니다.
+
 릴리즈 첨부는 설치 EXE·휴대용 ZIP·SHA256SUMS.txt 세 개입니다. 자산·엔진·폰트의 크레딧과 라이선스 전문은 패키지의 LICENSES.txt 및 게임의 라이선스 화면에 있습니다. 제거해도 진행·설정은 보존합니다.
 
 ## 소스에서 실행
@@ -56,6 +60,8 @@ python3 scripts/test-game.py --godot /path/to/Godot-4.7.2
 python3 scripts/test-game.py --godot /path/to/Godot-4.7.2 --rendered
 # 원본 사무실의 보호 지오메트리·이동·문 회귀 검사
 python3 scripts/test-map.py --godot /path/to/Godot-4.7.2
+# Linux(내보내기 템플릿·rpmbuild 필요): RPM·tar.gz 생성과 실행 검사
+python3 scripts/build-linux.py --godot godot --verify --rpm
 # Windows 내보내기 템플릿 설치 후 휴대용 EXE 생성
 python3 scripts/build-game.py --godot /path/to/Godot-4.7.2
 # Windows에서 고정된 Inno Setup 6.7.3으로 설치형 생성·실행 검사

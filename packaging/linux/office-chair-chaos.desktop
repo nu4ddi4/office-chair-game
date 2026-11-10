@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Office Chair Chaos
+Name[ko]=김 대리, 나 좀 밀어봐
+Comment=A floppy office chair comedy
+Comment[ko]=물리 인형 직원이 부장님을 의자로 모시는 코미디 게임
+Exec=office-chair-chaos
+Icon=office-chair-chaos
+Terminal=false
+Categories=Game;ActionGame;
+StartupWMClass=Godot
