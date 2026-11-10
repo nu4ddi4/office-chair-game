@@ -24,7 +24,7 @@ func begin(definition: Dictionary, saved: Dictionary = {}):
 	refilled = bool(saved.get("refilled",not mission.get("requires_refill",false)))
 	phase = "playing"; park_time = 0; reason = ""
 
-func tick(delta: float, at: Vector3, speed: float, seated: bool, coffee: float) -> String:
+func tick(delta: float, at: Vector3, speed: float, seated: bool, coffee: float, temperature = ChaosTuning.COFFEE_HOT) -> String:
 	if phase!="playing": return ""
 	elapsed += delta
 	if remaining>=0:
@@ -44,6 +44,7 @@ func tick(delta: float, at: Vector3, speed: float, seated: bool, coffee: float) 
 	park_time = 0
 	if last:
 		if coffee<float(mission.min_coffee): return fail("커피가 부족합니다. 최소 %d%%가 필요합니다." % mission.min_coffee)
+		if temperature<float(mission.get("min_temp",0)): return fail("커피가 식었습니다. %d°C 이상이어야 합니다." % int(mission.min_temp))
 		phase = "success"; return "success"
 	index += 1
 	if waypoint.get("checkpoint",false):
@@ -63,8 +64,8 @@ func fail(message: String) -> String:
 	phase = "failure"; reason = message
 	return "failure"
 
-func snapshot(coffee: float) -> Dictionary:
-	return {"mission":int(mission.id),"checkpoint":checkpoint,"coffee":clampf(coffee,0,100),"remaining":remaining,"elapsed":elapsed,"falls":falls,"damage":damage,"retries":retries,"refilled":refilled}
+func snapshot(coffee: float, temperature = ChaosTuning.COFFEE_HOT) -> Dictionary:
+	return {"mission":int(mission.id),"checkpoint":checkpoint,"coffee":clampf(coffee,0,100),"temperature":clampf(temperature,ChaosTuning.COFFEE_AMBIENT,ChaosTuning.COFFEE_HOT),"remaining":remaining,"elapsed":elapsed,"falls":falls,"damage":damage,"retries":retries,"refilled":refilled}
 
 func medals() -> Array:
 	return [elapsed<=float(mission.target_time),falls==0,damage<=int(mission.damage_budget)]

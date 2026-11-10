@@ -30,6 +30,10 @@ var previous_chair_velocity = Vector3.ZERO
 var impact_cooldown = 0.0
 var package_frames = 0
 var exit_point = Vector3(-24,0,19)
+var brim_cooldown = 0.0
+var brim_line = 0
+const BRIM_LINES = ["어어어, 커피!","살살, 살살!","넘친다 넘쳐!","내 바지...!"]
+const BUMP_LINES = ["김 대리, 사람 조심!","아이고, 죄송합니다!","앞을 봐야지, 앞을!","박 과장 미안해!"]
 
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -47,7 +51,10 @@ func _ready():
 	player.build(Vector3(-24,0,15.1)); player.chair = chair
 	boss = ChaosRagdoll.new(); boss.name = "Manager"; stage.add_child(boss)
 	boss.build(Vector3(-24,0,14),true); boss.sit(chair)
-	coffee = ChaosCoffee.new(); stage.add_child(coffee); coffee.setup(boss)
+	coffee = ChaosCoffee.new(); stage.add_child(coffee); coffee.setup(boss,chair); office.coffee = coffee
+	coffee.brimming.connect(func():
+		if run!=null and run.phase=="playing" and coffee.amount>1 and brim_cooldown<=0:
+			brim_cooldown = 5.0; ui.say(BRIM_LINES[brim_line%BRIM_LINES.size()],1.6); brim_line += 1)
 	camera = Camera3D.new(); add_child(camera); camera.current = true; camera.far = 1600; camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	camera_target = player.center()+Vector3(0,.45,0); _update_camera(1)
 	audio = ChaosAudio.new(); stage.add_child(audio)
@@ -56,6 +63,8 @@ func _ready():
 	player.fell.connect(func(): audio.play("impact",.5))
 	office.prop_damaged.connect(func(price):
 		if run!=null and run.phase=="playing": run.damage += price; audio.play("impact",.6))
+	office.coworker_bumped.connect(func():
+		if run!=null and run.phase=="playing": audio.play("impact",.45); ui.say(BUMP_LINES[brim_line%BUMP_LINES.size()],2.2); brim_line += 1)
 	updates = ChaosUpdater.new(); add_child(updates); updates.setup(self)
 	if not qa: updates.installer_ready.connect(updates.launch_installer)
 	updates.changed.connect(func():
@@ -128,10 +137,11 @@ func _restore_checkpoint():
 	var facing = atan2(-direction.x,-direction.z) if direction.length()>.1 else 0.0
 	chair.restore(origin,facing)
 	player.reset_pose(origin+Basis(Vector3.UP,facing)*Vector3(0,0,1.0),facing,false)
-	boss.sit(chair); coffee.restore(float(checkpoint_state.coffee))
+	boss.sit(chair); coffee.restore(float(checkpoint_state.coffee),float(checkpoint_state.get("temperature",ChaosTuning.COFFEE_HOT)))
 	run.index = run.checkpoint; run.park_time = 0; run.phase = "playing"; run.reason = ""
 	run.remaining = float(checkpoint_state.remaining); run.refilled = bool(checkpoint_state.refilled)
 	office.hazards = run.mission.get("hazards",false)
+	office.set_traffic(run.mission.get("traffic",[]),chair)
 	yaw = facing; pitch = .36; camera_target = player.center()+Vector3(0,.5,0); _update_camera(1)
 	reset_hold = 0; previous_chair_velocity = Vector3.ZERO; impact_cooldown = 1; _update_goal()
 	look_idle = 0
@@ -161,7 +171,7 @@ func _physics_process(delta):
 	office.apply_hazards(player,chair); office.apply_hazards(boss,chair)
 	if escaping:
 		if player.center().distance_to(exit_point+Vector3(0,.92,0))<1.8: _finish()
-	else: _handle_progress(run.tick(delta,chair.global_position,chair.linear_velocity.length(),boss.seated,coffee.amount))
+	else: _handle_progress(run.tick(delta,chair.global_position,chair.linear_velocity.length(),boss.seated,coffee.amount,coffee.temperature))
 	if Input.is_action_pressed("chaos_reset"):
 		reset_hold += delta
 		if reset_hold>=1: retry()
@@ -171,6 +181,7 @@ func _physics_process(delta):
 	distance_timer += delta
 	if distance_timer>.4: distance_timer=0; office.update_distance(player.center())
 	impact_cooldown = maxf(0,impact_cooldown-delta)
+	brim_cooldown = maxf(0,brim_cooldown-delta)
 	var acceleration = (chair.linear_velocity-previous_chair_velocity).length()/delta
 	if acceleration>40 and impact_cooldown<=0:
 		shake = .08 if store.data.settings.shake else 0
@@ -218,7 +229,7 @@ func _handle_progress(event: String):
 		else: _finish()
 		return
 	if event=="checkpoint":
-		checkpoint_state=run.snapshot(coffee.amount); persist_checkpoint(); ui.say("좋아. 여기서 잠깐만.",2)
+		checkpoint_state=run.snapshot(coffee.amount,coffee.temperature); persist_checkpoint(); ui.say("좋아. 여기서 잠깐만.",2)
 	var events: Dictionary=run.mission.get("events",{})
 	if events.has(str(run.index)): ui.say(events[str(run.index)],5)
 	boss.lean=.10 if run.index%2 else -.06
@@ -322,8 +333,8 @@ func interact():
 			if player.grab_handles(): audio.play("grip",.6)
 		"release": player.release_all()
 		"coffee":
-			coffee.amount=100; coffee.grace=1; run.refilled=true
-			checkpoint_state.coffee=100; checkpoint_state.refilled=true; persist_checkpoint(); ui.say("가득. 아주 가득.")
+			coffee.refill(); run.refilled=true
+			checkpoint_state.coffee=100; checkpoint_state.temperature=coffee.temperature; checkpoint_state.refilled=true; persist_checkpoint(); ui.say("가득. 아주 가득.")
 		"door": action.target.interact(player.center())
 		"right", "seat":
 			var query=PhysicsShapeQueryParameters3D.new()

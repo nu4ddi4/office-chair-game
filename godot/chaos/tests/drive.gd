@@ -13,6 +13,8 @@ func drive():
 		game.start_mission(id)
 		for i in range(120): await physics_frame
 		if id in [2,6]: game.interact()
+		# Timed and hot-coffee missions need roughly normal pushing speed.
+		var speed=2.4 if float(game.run.mission.budget)>0 else 1.9 if game.run.mission.has("min_temp") else 1.1
 		var last_index=0
 		var stuck=0
 		for i in range(36000):
@@ -20,7 +22,7 @@ func drive():
 			var goal=ChaosMissions.point(game.run.mission.route[game.run.index].at)
 			var at=game.chair.global_position
 			var offset=goal-at; offset.y=0
-			var desired=offset.normalized()*minf(1.1,offset.length()*1.5)
+			var desired=offset.normalized()*minf(speed,offset.length()*1.5)
 			game.chair.apply_central_force(((desired-Vector3(game.chair.linear_velocity.x,0,game.chair.linear_velocity.z))*190).limit_length(320))
 			for door in game.office.doors:
 				if door.leaf.global_position.distance_to(at)<2 and i%120==0: door.interact(at)
