@@ -15,7 +15,7 @@ func build(at: Vector3, yaw: float, width = 1.6, auto_close = true):
 	var mount = StaticBody3D.new()
 	mount.collision_layer = 0
 	add_child(mount)
-	leaf = ChaosShapes.rigid(self,Vector3(width/2,1.1,0),Vector3(width-.06,2.2,.075),18,Color("a9bbbd"))
+	leaf = ChaosShapes.rigid(self,Vector3(width/2,1.1,0),Vector3(width-.06,2.2,.075),ChaosTuning.DOOR_MASS,Color("a9bbbd"))
 	leaf.collision_layer = ChaosTuning.DOOR
 	leaf.name = "DoorLeaf"
 	leaf.add_to_group("chaos_grabbable")
@@ -37,14 +37,26 @@ func interact(from: Vector3):
 	leaf.apply_torque_impulse(Vector3.UP*side*25)
 	opened_for = 2.5
 
+# Anything leaning on the leaf (the chair, the boss's knees, the employee) swings
+# it open in the push direction and keeps the closer off while in contact.
 func _physics_process(delta):
 	if leaf == null: return
 	opened_for = maxf(0,opened_for-delta)
+	for body in leaf.get_colliding_bodies():
+		if body is RigidBody3D and body.collision_layer & (ChaosTuning.OBJECT|ChaosTuning.ACTOR):
+			var side = signf((global_basis.inverse()*(body.global_position-global_position)).z)
+			leaf.apply_torque(Vector3.UP*side*ChaosTuning.DOOR_PUSH_ASSIST)
+			opened_for = maxf(opened_for,1.2)
 	if closing and opened_for<=0:
 		var angle = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
 		leaf.apply_torque(Vector3.UP*(-angle*8.0-leaf.angular_velocity.y*3.0))
 
 func restore():
+	# Re-seat the hinge around the teleported leaf so the joint starts from the closed pose.
+	hinge.node_b = NodePath()
 	leaf.global_transform = global_transform*Transform3D(Basis.IDENTITY,Vector3(leaf.get_child(0).shape.size.x/2+.03,1.1,0))
+	hinge.node_b = hinge.get_path_to(leaf)
 	leaf.linear_velocity = Vector3.ZERO; leaf.angular_velocity = Vector3.ZERO
+	# A restored leaf must be awake, or it ignores the next push until something else wakes it.
+	leaf.sleeping = false; opened_for = 0.0
 	leaf.reset_physics_interpolation()

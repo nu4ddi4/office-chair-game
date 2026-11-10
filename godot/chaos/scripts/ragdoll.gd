@@ -181,11 +181,14 @@ func _seat_dynamics(delta: float):
 	var local_accel = chair.global_basis.inverse()*seat_acceleration
 	var angle = rad_to_deg(acos(clampf(chair.global_basis.y.dot(Vector3.UP),-1,1)))
 	var turn_load = Vector2(chair.linear_velocity.x,chair.linear_velocity.z).length()*absf(chair.angular_velocity.y)
+	# Doors are meant to be pushed through: a door contact is softer than a wall.
+	var door = chair.has_method("touching_door") and chair.touching_door()
+	var brake_limit = ChaosTuning.SEAT_BRAKE_ACCEL+(ChaosTuning.DOOR_SEAT_ALLOWANCE if door else 0.0)
 	var stress = maxf(0,maxf(absf(local_accel.x),turn_load)-ChaosTuning.SEAT_SIDE_ACCEL)
-	stress += maxf(0,local_accel.z-ChaosTuning.SEAT_BRAKE_ACCEL)
+	stress += maxf(0,local_accel.z-brake_limit)
 	stress += maxf(0,angle-30)*.12
 	seat_risk = clampf(seat_risk+(stress if stress>.05 else -2.0)*delta,0,1.5)
-	var impact = velocity_change.length()>ChaosTuning.SEAT_COLLISION_DELTA and (chair.linear_velocity-velocity_change).length()>2.0
+	var impact = velocity_change.length()>ChaosTuning.SEAT_COLLISION_DELTA*(1.6 if door else 1.0) and (chair.linear_velocity-velocity_change).length()>2.0
 	if impact or seat_risk>ChaosTuning.SEAT_RISK_LIMIT or angle>58:
 		var outward = chair.global_basis.x*signf(chair.angular_velocity.y)*minf(turn_load*.22,2)
 		var throw_velocity = -seat_acceleration.limit_length(12)*.16+outward+Vector3.UP*1.3
