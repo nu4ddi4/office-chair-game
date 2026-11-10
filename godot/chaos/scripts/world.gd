@@ -3,6 +3,7 @@ extends Node3D
 
 signal prop_damaged(price: int)
 signal coworker_bumped
+signal desk_knocked(speed: float)
 var doors: Array[ChaosDoor] = []
 var props: Array[ChaosProp] = []
 var goal: Node3D
@@ -20,13 +21,21 @@ var background_arms: Array[Node3D] = []
 var coffee: ChaosCoffee
 var walkers: Array[ChaosWalker] = []
 var traffic_spec: Array = []
+var clutter: ChaosClutter
+var environment: Environment
+var office_scene: Node3D
 
 func build(blockout = false):
 	var layout: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://chaos/data/office_layout.json"))
 	if not blockout and ResourceLoader.exists("res://assets/models/Office_Chaos.glb"):
 		var scene = load("res://assets/models/Office_Chaos.glb").instantiate()
 		add_child(scene)
+		office_scene = scene
+		clutter = ChaosClutter.new(); clutter.name = "DeskClutter"; add_child(clutter)
+		clutter.damaged.connect(func(price): prop_damaged.emit(price))
+		clutter.knocked.connect(func(speed): desk_knocked.emit(speed))
 		_import_collisions(scene)
+		clutter.collect(scene)
 		detailed = true
 	else:
 		ChaosShapes.box(self,Vector3(0,-.12,0),Vector3(60,.24,42),Color("343f44"),true)
@@ -84,20 +93,47 @@ func _import_collisions(node: Node):
 		body.collision_layer = ChaosTuning.FLOOR
 		node.add_child(body)
 		var bounds: AABB = node.mesh.get_aabb()
-		ChaosShapes.collision(body,bounds.size,bounds.get_center())
+		if not (clutter!=null and "Corporate_Desk" in str(node.name) and clutter.desk_collision(node,body)):
+			ChaosShapes.collision(body,bounds.size,bounds.get_center())
 		if str(node.name).begins_with("COLLIDER_"): node.hide()
 	for child in node.get_children(): _import_collisions(child)
 
 func _lighting():
-	var environment = WorldEnvironment.new()
-	environment.environment = Environment.new()
-	environment.environment.background_mode = Environment.BG_COLOR
-	environment.environment.background_color = Color("73878e")
-	environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.environment.ambient_light_color = Color("d1e2e4")
-	environment.environment.ambient_light_energy = .45
-	environment.environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	add_child(environment)
+	var world_environment = WorldEnvironment.new()
+	environment = Environment.new()
+	world_environment.environment = environment
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color("73878e")
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color("d6e1e0")
+	environment.ambient_light_energy = .42
+	environment.tonemap_mode = Environment.TONE_MAPPER_AGX
+	environment.tonemap_exposure = 1.05
+	# Faint depth haze so the 60 m corridor recedes instead of staying flat.
+	environment.fog_enabled = true
+	environment.fog_light_color = Color("c9d4d2")
+	environment.fog_density = .0035
+	environment.fog_sky_affect = 0
+	environment.adjustment_enabled = true
+	environment.adjustment_contrast = 1.06
+	environment.adjustment_saturation = 1.06
+	# Ambient occlusion grounds desks, chairs and dolls; glow lets the ceiling panels bloom.
+	environment.ssao_radius = 1.1
+	environment.ssao_intensity = 1.8
+	environment.ssao_power = 1.6
+	environment.ssao_detail = .6
+	environment.ssao_light_affect = .15
+	environment.glow_intensity = .55
+	environment.glow_strength = .9
+	environment.glow_bloom = .04
+	environment.glow_hdr_threshold = 1.1
+	environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	# Screen-space indirect light: walls and floors bounce a little colour.
+	environment.ssil_radius = 4.0
+	environment.ssil_intensity = .7
+	environment.ssil_sharpness = .9
+	add_child(world_environment)
+	apply_quality(1)
 	var sun = DirectionalLight3D.new(); add_child(sun)
 	sun.rotation_degrees = Vector3(-52,-30,0); sun.light_color = Color("ffe0b0"); sun.light_energy = .65
 	sun.shadow_enabled = true
@@ -108,6 +144,19 @@ func _lighting():
 			lamp.light_color = Color("f3eddd"); lights.append(lamp)
 			ChaosShapes.box(self,Vector3(x,3.25,z),Vector3(1.6,.04,.5),Color("fff3d7"))
 
+# A mesh instance from the detailed office (e.g. a desk chair or mug) to reuse for the hero props.
+func model(prefix: String) -> MeshInstance3D:
+	if office_scene==null: return null
+	var found = office_scene.find_children(prefix+"*","MeshInstance3D",true,false)
+	return found[0] if not found.is_empty() else null
+
+# 0 low: none of the screen effects. 1 medium: AO and glow. 2 high: adds indirect light.
+func apply_quality(quality: int):
+	if environment==null: return
+	environment.ssao_enabled = quality>=1
+	environment.glow_enabled = quality>=1
+	environment.ssil_enabled = quality>=2
+
 func set_goal(point: Vector3, title: String):
 	goal.position = point
 	goal_label.text = title
@@ -116,6 +165,7 @@ func restore():
 	for door in doors: door.restore()
 	for prop in props: prop.restore()
 	for walker in walkers: walker.restore()
+	if clutter!=null: clutter.restore()
 	clock = 0
 
 # Scripted coworkers walking the corridor. Rebuilt only when the mission changes.
@@ -145,6 +195,12 @@ func apply_hazards(actor: ChaosRagdoll, chair: ChaosChair):
 		var pulse = maxf(0,sin(clock*1.2))
 		for body in actor.bodies.values(): body.apply_central_force(Vector3.LEFT*body.mass*2.8*pulse)
 		if not actor.boss: chair.apply_central_force(Vector3.LEFT*35*pulse)
+
+# Called when the chair hits something hard: wake the props of any desk it struck.
+func chair_impact(chair: RigidBody3D, velocity: Vector3):
+	if clutter==null: return
+	for body in chair.get_colliding_bodies():
+		if body.has_meta("desk"): clutter.knock(int(body.get_meta("desk")),velocity)
 
 func update_distance(at: Vector3):
 	for prop in props:

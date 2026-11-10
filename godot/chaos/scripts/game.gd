@@ -59,10 +59,15 @@ func _ready():
 	camera_target = player.center()+Vector3(0,.45,0); _update_camera(1)
 	audio = ChaosAudio.new(); stage.add_child(audio)
 	ui = ChaosUI.new(); add_child(ui); ui.setup(self)
+	if office.detailed:
+		chair.dress(office.model("CHAOS_CORP_Staff_Chair_13"))
+		coffee.dress(office.model("DECOR_Chaos_Mug_"))
 	boss.fell.connect(_boss_fell)
+	coffee.spilled.connect(func(amount): audio.spill(amount))
+	office.desk_knocked.connect(func(speed): audio.play("clatter",clampf(speed/4,.4,1)))
 	player.fell.connect(func(): audio.play("impact",.5))
 	office.prop_damaged.connect(func(price):
-		if run!=null and run.phase=="playing": run.damage += price; audio.play("impact",.6))
+		if run!=null and run.phase=="playing": run.damage += price; audio.play("shatter",.85))
 	office.coworker_bumped.connect(func():
 		if run!=null and run.phase=="playing": audio.play("impact",.45); ui.say(BUMP_LINES[brim_line%BUMP_LINES.size()],2.2); brim_line += 1)
 	updates = ChaosUpdater.new(); add_child(updates); updates.setup(self)
@@ -109,6 +114,7 @@ func apply_settings():
 	get_viewport().msaa_3d = Viewport.MSAA_DISABLED if quality==0 else Viewport.MSAA_2X
 	for child in office.get_children():
 		if child is DirectionalLight3D: child.shadow_enabled = quality>0
+	office.apply_quality(quality)
 
 func new_game():
 	var settings: Dictionary = store.data.settings.duplicate(true)
@@ -183,10 +189,12 @@ func _physics_process(delta):
 	impact_cooldown = maxf(0,impact_cooldown-delta)
 	brim_cooldown = maxf(0,brim_cooldown-delta)
 	var acceleration = (chair.linear_velocity-previous_chair_velocity).length()/delta
+	if acceleration>ChaosTuning.CLUTTER_IMPACT_ACCEL: office.chair_impact(chair,previous_chair_velocity)
 	if acceleration>40 and impact_cooldown<=0:
 		shake = .08 if store.data.settings.shake else 0
 		audio.play("impact",minf(acceleration/100,1)); impact_cooldown=.5
 	previous_chair_velocity=chair.linear_velocity; audio.update_rolling(chair.linear_velocity.length())
+	audio.update_slosh(coffee.slosh_velocity.length(),coffee.fullness())
 	if "--package-smoke" in OS.get_cmdline_user_args():
 		package_frames += 1
 		if package_frames >= 240:
