@@ -10,6 +10,21 @@
 - [office_notepads](https://polyhaven.com/a/office_notepads) — Ulan Cabanilla, CC0, 2K.
 - [clipboard](https://polyhaven.com/a/clipboard) — ProgrammerOnCoffee, CC0, 2K.
 - [korean_fire_extinguisher_01](https://polyhaven.com/a/korean_fire_extinguisher_01) — UMJOORIN, CC0. 기존 에셋 유지.
+- [potted_plant_01](https://polyhaven.com/a/potted_plant_01) — Rico Cilliers, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [potted_plant_02](https://polyhaven.com/a/potted_plant_02) — Rico Cilliers, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [book_encyclopedia_set_01](https://polyhaven.com/a/book_encyclopedia_set_01) — John Malcolm, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [steel_frame_shelves_03](https://polyhaven.com/a/steel_frame_shelves_03) — Ulan Cabanilla, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [drawer_cabinet](https://polyhaven.com/a/drawer_cabinet) — Ulan Cabanilla, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [cardboard_box_01](https://polyhaven.com/a/cardboard_box_01) — Rahul Chaudhary, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [wall_clock](https://polyhaven.com/a/wall_clock) — PierreB3D, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [fire_alarm](https://polyhaven.com/a/fire_alarm) — Slinc, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [vintage_stapler](https://polyhaven.com/a/vintage_stapler) — Mateusz Sadek, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [binder_notebook](https://polyhaven.com/a/binder_notebook) — DaDrood, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [desk_lamp_arm_01](https://polyhaven.com/a/desk_lamp_arm_01) — Yann Kervran / Kuutti Siitonen, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [sofa_02](https://polyhaven.com/a/sofa_02) — Kirill Sannikov, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [modern_coffee_table_01](https://polyhaven.com/a/modern_coffee_table_01) — Amin, Poly Haven CC0, 1K. 확장 사무실 소품.
+- [vintage_electric_kettle](https://polyhaven.com/a/vintage_electric_kettle) — SV Garip, Poly Haven CC0, 1K. 확장 사무실 소품.
+- 머그컵·소화전 함은 Poly Haven에 맞는 모델이 없어 이 작업에서 제작했습니다(라벨 글꼴 Noto Sans KR, OFL).
 - 대시보드·포스터·패브릭 및 카펫 마감은 이 작업에서 제작했습니다.
 Three.js 0.186.1 / RoomEnvironment (MIT)
 The MIT License
