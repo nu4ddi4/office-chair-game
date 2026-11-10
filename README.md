@@ -72,10 +72,9 @@ powershell -NoProfile -File tests/windows/installer-update.ps1
 - `godot/chaos/data/`: 미션·경로·60×42m 사무실 배치.
 - `assets/authoring/Office_Chaos.blend`: 확장 사무실 제작 원본.
 - `godot/assets/models/Office_Chaos.glb`: 새 게임의 실행용 맵.
-- `scripts/build-chaos-office.py`: 기존 자산을 재사용해 확장 맵을 재생성하는 Blender 스크립트.
+- `scripts/build-chaos-office.py`: 확장 맵의 초기 생성 기록. 이후 `Office_Chaos.blend`를 Blender에서 직접 편집하므로 다시 실행하지 않는다(편집 내용이 사라짐).
 
 ```sh
-blender -b --python scripts/build-chaos-office.py
 # 개발 전용 직접 시작: 정상 실행에서는 미션을 순서대로 해금
 # --chaos-test는 QA 전용 별도 저장과 무음을 사용 (--audible-qa로 음향 활성화)
 godot --path godot -- --chaos-test --mission 3

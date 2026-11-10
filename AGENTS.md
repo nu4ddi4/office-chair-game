@@ -14,7 +14,7 @@
 
 - Godot 4.7.2 stable, Jolt 3D, 120Hz 물리를 사용한다. 튜닝 수치는 chaos/scripts/tuning.gd와 각 제어기의 이름 있는 매개변수로 관리한다.
 - 직원·부장님의 충돌 반응과 힘을 통한 손 잡기를 유지한다. 실제 플레이에서 강체 위치를 매 프레임 강제로 덮어쓰지 않는다.
-- 원본 사무실 GLB·Blender·출처는 보존한다. 새 맵은 Office_Chaos.blend와 Office_Chaos.glb로 제작하며 LFS를 사용한다. source 복원 후 Blender 생성 스크립트로 재현한다.
+- 원본 사무실 GLB·Blender·출처는 보존한다. 새 맵의 마스터는 Blender에서 직접 편집하는 Office_Chaos.blend이며, Chaos_Office 컬렉션을 Office_Chaos.glb로 내보낸다(GLB·extras 포함·카메라/조명/애니메이션 제외). 둘 다 LFS를 사용한다. scripts/build-chaos-office.py는 초기 생성용 기록이며 다시 실행하면 직접 편집한 내용이 사라지므로 사용하지 않는다. 벽·문 좌표는 office_layout.json과 일치시키고, 충돌은 STATIC_·COLLIDER_ 이름 규칙으로 두며, 내보낸 뒤 scripts/check-chaos-assets.py를 실행한다.
 - 새 저장·설정은 OfficeChairChaos 사용자 폴더에만 쓴다. 기존 게임의 저장·업데이트·Android 패키지를 사용하지 않는다.
 - 배포 파일은 Windows 사용자별 설치 EXE·휴대용 ZIP·체크섬 세 개다. 크레딧·엔진·자산·폰트의 고지를 LICENSES.txt 하나로 묶되 전문을 보존한다. 게임에서도 전문을 열 수 있어야 한다.
 - 새 제품의 공개 안정 버전만 확인한다. 설치는 사용자 동의·진행 저장·SHA-256 검증 후 수행하며, 설치형 업데이트 실패 시 이전 실행 파일을 복구한다. Test CI는 아티팩트만 만든다. 명시적으로 요청한 공개 릴리스는 main 전용 수동 Release 워크플로에서 검증된 Windows 아티팩트를 재사용해 게시한다. 옛 제품 업데이트는 게시하지 않는다.
