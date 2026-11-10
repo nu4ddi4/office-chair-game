@@ -92,6 +92,14 @@ func run_tests():
 		if id in [2,6]:
 			check(game.context().get("kind","")=="coffee","mission %d refill prompt" % id)
 			game.interact(); check(game.run.refilled and game.coffee.amount==100,"mission %d refill" % id)
+	var started = Time.get_ticks_msec()
+	var sounds = ChaosAudio.synthesize()
+	metrics.audio_synth_ms = Time.get_ticks_msec()-started
+	var complete = true
+	for kind in ["impact","grip","spill","shatter","clatter","success","failure","rolling","slosh","ambience"]:
+		complete = complete and sounds.has(kind) and not sounds[kind].is_empty() and sounds[kind][0].data.size()>1000
+	check(complete,"every synthesized sound has audio data")
+	check(ChaosAudio.babble(6,115,true,3).size()>ChaosAudio.RATE/2,"the mumble voice produces a line")
 	game.ui.settings(); await capture("05-settings")
 	game.ui.updates_menu(); await capture("09-updates")
 	var update_requests = [0]
@@ -106,7 +114,7 @@ func run_tests():
 	check(game.keycode("forward")==KEY_UP,"key rebinding")
 	game.apply_settings()
 	check(game.camera.fov==70,"camera settings")
-	metrics.active_bodies=game.player.bodies.size()+game.boss.bodies.size()+game.office.props.size()+game.office.doors.size()+2
+	metrics.active_bodies=game.player.bodies.size()+game.boss.bodies.size()+game.office.props.size()+game.office.doors.size()+2+ChaosClutter.MAX_AWAKE
 	check(metrics.active_bodies<=ChaosTuning.ACTIVE_BODY_BUDGET,"body budget")
 	game.ui.field(); game.run.phase="success"; game.escaping=true
 	game.player.reset_pose(game.exit_point,0,false)
