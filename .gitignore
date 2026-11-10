@@ -23,4 +23,5 @@ godot/assets/models/Office_Chaos_*.jpg.import
 godot/assets/models/Office_Chaos_*.png.import
 chaos-results/
 chaos-dist/
+chaos-dist-linux/
 *.blend1
