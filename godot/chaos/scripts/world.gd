@@ -186,7 +186,18 @@ func _physics_process(delta):
 	wet.visible = hazards
 	fan.visible = hazards
 
+# Door frames funnel an approaching chair toward the middle of the opening so a
+# slightly off-centre approach does not snag on the jamb.
+func guide_doors(chair: ChaosChair):
+	for door in doors:
+		var local = door.global_basis.inverse()*(chair.global_position-door.global_position)
+		var velocity = door.global_basis.inverse()*chair.linear_velocity
+		var off = local.x-.8
+		if absf(local.z)<ChaosTuning.DOOR_GUIDE_RANGE and absf(off)<.8 and velocity.z*local.z<0:
+			chair.apply_central_force(door.global_basis.x*clampf(-off*ChaosTuning.DOOR_GUIDE,-160,160))
+
 func apply_hazards(actor: ChaosRagdoll, chair: ChaosChair):
+	if not actor.boss: guide_doors(chair)
 	var at = chair.global_position
 	if not actor.boss: chair.slippery = (hazards and at.x>10 and at.x<20 and absf(at.z)<2) or (coffee!=null and coffee.on_puddle(at))
 	var actor_at = actor.center()
