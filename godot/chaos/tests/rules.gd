@@ -25,10 +25,16 @@ func run_tests():
 	var timed=ChaosMissionRun.new(); timed.begin(missions[3]); timed.remaining=.01
 	check(timed.tick(.02,Vector3.ZERO,0,true,100)=="failure","time expiration")
 	var coffee=ChaosMissionRun.new(); coffee.begin(missions[1]); coffee.index=missions[1].route.size()-1; coffee.refilled=true
-	check(coffee.tick(2,ChaosMissions.point(missions[1].route[-1].at),0,true,19.9)=="failure","coffee lower boundary")
+	var minimum=float(missions[1].min_coffee)
+	check(coffee.tick(2,ChaosMissions.point(missions[1].route[-1].at),0,true,minimum-.1)=="failure","coffee lower boundary")
 	coffee.begin(missions[1]); coffee.index=missions[1].route.size()-1; coffee.refilled=true
-	check(coffee.tick(2,ChaosMissions.point(missions[1].route[-1].at),.26,true,20)=="","parking speed boundary")
-	check(coffee.tick(2,ChaosMissions.point(missions[1].route[-1].at),0,true,20)=="success","coffee exact boundary")
+	check(coffee.tick(2,ChaosMissions.point(missions[1].route[-1].at),.26,true,minimum)=="","parking speed boundary")
+	check(coffee.tick(2,ChaosMissions.point(missions[1].route[-1].at),0,true,minimum)=="success","coffee exact boundary")
+	var hot=ChaosMissionRun.new(); var warm=float(missions[1].min_temp)
+	hot.begin(missions[1]); hot.index=missions[1].route.size()-1; hot.refilled=true
+	check(hot.tick(2,ChaosMissions.point(missions[1].route[-1].at),0,true,100,warm-.1)=="failure","cold coffee fails")
+	hot.begin(missions[1]); hot.index=missions[1].route.size()-1; hot.refilled=true
+	check(hot.tick(2,ChaosMissions.point(missions[1].route[-1].at),0,true,100,warm)=="success","temperature exact boundary")
 	var strict=ChaosMissionRun.new(); strict.begin(missions[4])
 	check(strict.boss_fell()=="fall","practice fall recoverable")
 	strict.index=2; check(strict.boss_fell()=="failure","strict fall fails")
@@ -36,10 +42,10 @@ func run_tests():
 	check(waiting.tick(2,ChaosMissions.point(missions[1].route[0].at),0,true,100)=="","refill must happen")
 	var save=ChaosSave.new(); save.directory="user://rules-%d" % OS.get_process_id()
 	check(ChaosSave.valid(save.data),"fresh save valid")
-	save.data.resume=coffee.snapshot(20); save.data.unlocked=2
+	save.data.resume=coffee.snapshot(20,63.5); save.data.unlocked=2
 	check(save.write(),"atomic save")
 	var loaded=ChaosSave.new(); loaded.directory=save.directory
-	check(loaded.load_progress() and loaded.data.resume.coffee==20,"save roundtrip")
+	check(loaded.load_progress() and loaded.data.resume.coffee==20 and loaded.data.resume.temperature==63.5,"save roundtrip")
 	save.data.resume={}; save.complete(coffee)
 	check(save.data.unlocked==3 and 2 in save.data.completed,"completion unlocks")
 	check(save.write(),"backup save")

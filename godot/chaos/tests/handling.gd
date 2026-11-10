@@ -36,6 +36,47 @@ func key(action: String, pressed = true):
 	if pressed: Input.action_press("chaos_"+action)
 	else: Input.action_release("chaos_"+action)
 
+# Corridor coworkers: a slow approach makes them step aside, a boost does not.
+func approach(walker: ChaosWalker, speed: float, frames_max: int, shot = "") -> Dictionary:
+	var result = {"dodge":0.0,"closest":99.0,"bumped":false}
+	var hit = func(): result.bumped = true
+	walker.bumped.connect(hit)
+	for i in range(frames_max):
+		var offset = walker.global_position-game.chair.global_position; offset.y = 0
+		var velocity = Vector3(game.chair.linear_velocity.x,0,game.chair.linear_velocity.z)
+		game.chair.apply_central_force(((offset.normalized()*speed-velocity)*400).limit_length(900))
+		if not shot.is_empty() and walker.dodge>.55 and result.dodge<=.55: await capture(shot)
+		result.dodge = maxf(result.dodge,walker.dodge)
+		result.closest = minf(result.closest,offset.length())
+		await frames(1)
+	walker.bumped.disconnect(hit)
+	return result
+
+func traffic_checks():
+	game.clear_inputs(); game.store.data.unlocked = 6; game.start_mission(4); await frames(30)
+	check(game.office.walkers.size()==3,"mission traffic spawns its coworkers")
+	var walker: ChaosWalker = game.office.walkers[1]
+	var start_x = walker.global_position.x
+	await frames(240)
+	check(absf(walker.global_position.x-start_x)>1.5,"coworkers walk their corridor lane")
+	walker.restore(); walker.pause = 99
+	game.chair.restore(walker.global_position+Vector3(-4.5,.015,0),-PI/2)
+	game.player.reset_pose(game.chair.global_position+Vector3(-1,0,0),-PI/2,false)
+	game.yaw = -PI/2; game.look_idle = 10
+	game.boss.sit(game.chair); game.coffee.restore(100); await frames(30)
+	var slow = await approach(walker,1.0,420,"10-traffic-dodge")
+	metrics.slow_dodge = slow.dodge; metrics.slow_closest = slow.closest
+	check(slow.dodge>.8 and not slow.bumped,"a careful approach lets the coworker step aside")
+	walker.restore(); walker.pause = 99
+	game.chair.restore(walker.global_position+Vector3(-4.5,.015,0),-PI/2)
+	game.player.reset_pose(game.chair.global_position+Vector3(-1,0,0),-PI/2,false)
+	game.yaw = -PI/2; game.look_idle = 10
+	game.boss.sit(game.chair); game.coffee.restore(100); await frames(30)
+	var fast = await approach(walker,6.5,150)
+	metrics.fast_closest = fast.closest; metrics.fast_bumped = fast.bumped
+	check(fast.bumped,"rushing at a coworker collides before they can step aside")
+	game.clear_inputs()
+
 func run_tests():
 	var args = OS.get_cmdline_user_args()
 	if "--capture-dir" in args: capture_dir = args[args.find("--capture-dir")+1]
@@ -53,8 +94,10 @@ func run_tests():
 	metrics.normal_speed = game.chair.linear_velocity.length()
 	metrics.forward_distance = game.chair.position.x+22
 	metrics.normal_coffee = game.coffee.amount
+	metrics.normal_slosh = game.coffee.peak_slosh
 	check(metrics.forward_distance>5 and absf(game.chair.position.z)<.65,"W pushes forwards independently of camera yaw")
 	check(game.boss.seated and employee_falls==0,"ordinary straight pushing keeps both characters stable")
+	check(metrics.normal_coffee>99.5 and metrics.normal_slosh<ChaosTuning.COFFEE_SLOSH_WARN,"smooth pushing does not spill coffee")
 	await capture("06-forward-pushing")
 	key("right"); await frames(100); key("right",false)
 	check(game.boss.seated,"gentle steering does not automatically eject the passenger")
@@ -65,11 +108,12 @@ func run_tests():
 	await frames(480)
 	metrics.boost_speed = game.chair.linear_velocity.length()
 	metrics.boost_coffee = game.coffee.amount
+	metrics.boost_slosh = game.coffee.peak_slosh
 	metrics.boost_employee_falls = employee_falls
 	check(metrics.boost_speed>4.5 and metrics.boost_speed>metrics.normal_speed*1.6,"boost produces substantial measurable speed")
 	check(employee_falls==0 and not game.player.fallen and game.player.pushing,"four seconds of open straight boost do not topple the employee or break the grip")
 	check(game.boss.seated,"straight boosting has a useful safe window")
-	check(game.coffee.amount<90 and game.coffee.amount<metrics.normal_coffee-4,"boost visibly spills more coffee than ordinary pushing")
+	check(metrics.boost_slosh>metrics.normal_slosh+.4 and metrics.boost_slosh>=ChaosTuning.COFFEE_SLOSH_WARN,"a boost launch sloshes the coffee to the warning level")
 	await capture("07-boost")
 	key("right")
 	for i in range(240):
@@ -88,6 +132,9 @@ func run_tests():
 		await frames(1)
 		if not game.boss.seated: break
 	check(not game.boss.seated,"a fast frontal collision breaks the seat connection")
+	await frames(30)
+	metrics.collision_coffee = game.coffee.amount
+	check(game.coffee.amount<95,"a collision spills coffee")
 	game.clear_inputs()
 	await fixture()
 	# Exercise the real mouse path without a preferred target parameter.
@@ -101,6 +148,7 @@ func run_tests():
 	game.player.release_all()
 	await frames(240)
 	check(game.coffee.amount>98,"idle coffee is not drained by solver noise")
+	await traffic_checks()
 	print("CHAOS_HANDLING ",JSON.stringify({"passed":failures.is_empty(),"checks":checks,"failures":failures,"metrics":metrics}))
 	game.clear_inputs(); paused = false; game.queue_free(); await process_frame; await process_frame
 	quit(0 if failures.is_empty() else 1)

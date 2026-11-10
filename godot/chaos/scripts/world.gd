@@ -2,6 +2,7 @@ class_name ChaosOffice
 extends Node3D
 
 signal prop_damaged(price: int)
+signal coworker_bumped
 var doors: Array[ChaosDoor] = []
 var props: Array[ChaosProp] = []
 var goal: Node3D
@@ -16,6 +17,9 @@ var hazards = false
 var detailed = false
 var lights: Array[OmniLight3D] = []
 var background_arms: Array[Node3D] = []
+var coffee: ChaosCoffee
+var walkers: Array[ChaosWalker] = []
+var traffic_spec: Array = []
 
 func build(blockout = false):
 	var layout: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://chaos/data/office_layout.json"))
@@ -111,7 +115,19 @@ func set_goal(point: Vector3, title: String):
 func restore():
 	for door in doors: door.restore()
 	for prop in props: prop.restore()
+	for walker in walkers: walker.restore()
 	clock = 0
+
+# Scripted coworkers walking the corridor. Rebuilt only when the mission changes.
+func set_traffic(spec: Array, chair: Node3D):
+	if spec==traffic_spec and walkers.size()==spec.size(): return
+	for walker in walkers: walker.queue_free()
+	walkers.clear(); traffic_spec = spec.duplicate(true)
+	for i in range(spec.size()):
+		var walker = ChaosWalker.new(); add_child(walker)
+		walker.build(spec[i],chair,i)
+		walker.bumped.connect(func(): coworker_bumped.emit())
+		walkers.append(walker)
 
 func _physics_process(delta):
 	clock += delta
@@ -122,9 +138,9 @@ func _physics_process(delta):
 
 func apply_hazards(actor: ChaosRagdoll, chair: ChaosChair):
 	var at = chair.global_position
-	if not actor.boss: chair.slippery = hazards and at.x>10 and at.x<20 and absf(at.z)<2
+	if not actor.boss: chair.slippery = (hazards and at.x>10 and at.x<20 and absf(at.z)<2) or (coffee!=null and coffee.on_puddle(at))
 	var actor_at = actor.center()
-	actor.slippery = hazards and actor_at.x>10 and actor_at.x<20 and absf(actor_at.z)<2
+	actor.slippery = (hazards and actor_at.x>10 and actor_at.x<20 and absf(actor_at.z)<2) or (coffee!=null and coffee.on_puddle(actor_at))
 	if hazards and actor.center().x>21 and actor.center().x<27 and actor.center().z<-5 and actor.center().z>-11:
 		var pulse = maxf(0,sin(clock*1.2))
 		for body in actor.bodies.values(): body.apply_central_force(Vector3.LEFT*body.mass*2.8*pulse)
