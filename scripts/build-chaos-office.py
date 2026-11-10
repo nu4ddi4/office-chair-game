@@ -2,6 +2,9 @@
 
 blender -b --python scripts/build-chaos-office.py
 The retained GLB and authoring master are never modified.
+
+HISTORICAL: Office_Chaos.blend is now edited directly in Blender. Re-running this
+script overwrites those edits; do not use it to rebuild the map.
 """
 import json
 from pathlib import Path
