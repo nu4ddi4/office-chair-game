@@ -27,6 +27,6 @@
 - 큰 변경은 --suite all 한 번. 테스트는 실제 회귀 위험을 검사하며 같은 입력을 불필요하게 재검사하지 않는다.
 - 검사기는 원본 보호 지오메트리·새 맵 배치·미션 경로 검사도 포함한다. 원본 실행 회귀는 scripts/test-map.py로 확인한다.
 - 실제 경로의 강체 충돌 검사는 godot/chaos/tests/drive.gd다. 의자에 제한된 힘을 가해 경로·문을 검사하며 플레이어 숙련도나 재미를 입증하는 검사는 아니다.
-- CI 변경은 actionlint. 문서는 링크·git diff --check. Windows EXE 실행은 Windows의 scripts/build-game.py --verify 또는 CI로 검증한다. Linux 패키지는 Linux의 scripts/build-linux.py --verify --rpm 또는 CI의 linux·fedora 작업으로 검증한다.
+- CI 변경은 actionlint. 문서는 링크·git diff --check. Windows EXE 실행은 Windows의 scripts/build-game.py --verify 또는 CI로 검증한다. Linux 패키지는 Linux의 scripts/build-linux.py --verify --rpm 또는 CI의 linux 작업(Fedora 컨테이너 설치·실행 포함)으로 검증한다. Docker가 있으면 `docker run --rm -v "$PWD:/repo:ro" fedora:latest bash /repo/tests/linux/fedora-check.sh`로 로컬에서도 확인할 수 있다.
 - 업데이트 규칙·동의·저장·다운로드 검사는 --suite updates. Windows CI는 고정된 Inno Setup으로 설치 프로그램을 만들고 tests/windows/installer-update.ps1을 Windows PowerShell에서 실행해 설치·업데이트·해시 거부·복구·제거와 저장 보존을 확인한다. 릴리스 포장·구버전 중복 파일 정리는 python3 -m unittest discover -s tests/release로 검사한다.
 - 성능 목표·30~60분 분량·재미는 자동 검증으로 통과했다고 주장하지 않는다. 실제 사람의 플레이와 지정 하드웨어 측정이 필요하다.
