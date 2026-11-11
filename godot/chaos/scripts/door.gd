@@ -1,7 +1,11 @@
 class_name ChaosDoor
 extends Node3D
 
+signal slammed(strength: float)
+signal banged(strength: float)
 var leaf: RigidBody3D
+var touching: Dictionary = {}
+var bang_cooldown = 0.0
 var hinge: HingeJoint3D
 var closing = false
 var opened_for = 0.0
@@ -42,11 +46,34 @@ func interact(from: Vector3):
 func _physics_process(delta):
 	if leaf == null: return
 	opened_for = maxf(0,opened_for-delta)
+	bang_cooldown = maxf(0,bang_cooldown-delta)
+	var now: Dictionary = {}
 	for body in leaf.get_colliding_bodies():
 		if body is RigidBody3D and body.collision_layer & (ChaosTuning.OBJECT|ChaosTuning.ACTOR):
 			var side = signf((global_basis.inverse()*(body.global_position-global_position)).z)
 			leaf.apply_torque(Vector3.UP*side*ChaosTuning.DOOR_PUSH_ASSIST)
 			opened_for = maxf(opened_for,1.2)
+			now[body.get_instance_id()] = true
+			if body is ChaosChair and not touching.has(body.get_instance_id()): _slam(body,side)
+	touching = now
+	# The leaf hitting its stop after a hard swing.
+	var angle = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
+	var spin = absf(leaf.angular_velocity.y)
+	if absf(angle)>ChaosTuning.DOOR_STOP_ANGLE and spin>ChaosTuning.DOOR_BANG_SPIN and bang_cooldown<=0:
+		bang_cooldown = .6
+		banged.emit(clampf(spin/6.0,.3,1.0))
+
+# First contact of a moving chair: throw the leaf open, kick the chair back a
+# little and report how hard it was. The boss's seat allowance absorbs the kick.
+func _slam(chair: RigidBody3D, side: float):
+	var normal = global_basis.z
+	var speed = absf(chair.linear_velocity.dot(normal))
+	if speed<ChaosTuning.DOOR_SLAM_SPEED: return
+	leaf.apply_torque_impulse(Vector3.UP*side*speed*ChaosTuning.DOOR_SLAM_TORQUE)
+	var travel = normal*signf(chair.linear_velocity.dot(normal))
+	chair.apply_central_impulse(-travel*speed*chair.mass*ChaosTuning.DOOR_SLAM_PUSHBACK)
+	opened_for = maxf(opened_for,2.0)
+	slammed.emit(clampf((speed-ChaosTuning.DOOR_SLAM_SPEED)/3.0+.3,.3,1.0))
 	if closing and opened_for<=0:
 		var angle = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
 		leaf.apply_torque(Vector3.UP*(-angle*8.0-leaf.angular_velocity.y*3.0))
@@ -58,5 +85,5 @@ func restore():
 	hinge.node_b = hinge.get_path_to(leaf)
 	leaf.linear_velocity = Vector3.ZERO; leaf.angular_velocity = Vector3.ZERO
 	# A restored leaf must be awake, or it ignores the next push until something else wakes it.
-	leaf.sleeping = false; opened_for = 0.0
+	leaf.sleeping = false; opened_for = 0.0; touching = {}
 	leaf.reset_physics_interpolation()
