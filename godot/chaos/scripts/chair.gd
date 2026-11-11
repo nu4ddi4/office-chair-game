@@ -96,6 +96,11 @@ func dress(source: MeshInstance3D):
 	for visual in base_visuals: visual.hide()
 	for wheel in wheels: wheel.hide()
 
+func touching_door() -> bool:
+	for body in get_colliding_bodies():
+		if body is CollisionObject3D and body.collision_layer & ChaosTuning.DOOR: return true
+	return false
+
 func caster_direction() -> Vector3:
 	return Vector3(-sin(caster_heading),0,-cos(caster_heading))
 
