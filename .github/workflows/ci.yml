@@ -26,8 +26,13 @@ jobs:
       - name: Reuse the Godot import cache
         uses: actions/cache@v4
         with:
-          path: godot/.godot
-          key: godot-import-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**', 'godot/**/*.import', 'godot/project.godot') }}
+          # Godot extracts the maps' embedded textures next to the GLBs, outside .godot;
+          # they must be cached together or a cache hit leaves the map unloadable.
+          path: |
+            godot/.godot
+            godot/assets/models/Office_Chaos_*
+            godot/assets/models/Interior_07_Godot_*
+          key: godot-import-v2-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**/*.glb', 'godot/assets/**/*.import', 'godot/assets/fonts/**', 'godot/assets/textures/**', 'godot/project.godot') }}
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.7.2
@@ -60,8 +65,13 @@ jobs:
       - name: Reuse the Godot import cache
         uses: actions/cache@v4
         with:
-          path: godot/.godot
-          key: godot-import-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**', 'godot/**/*.import', 'godot/project.godot') }}
+          # Godot extracts the maps' embedded textures next to the GLBs, outside .godot;
+          # they must be cached together or a cache hit leaves the map unloadable.
+          path: |
+            godot/.godot
+            godot/assets/models/Office_Chaos_*
+            godot/assets/models/Interior_07_Godot_*
+          key: godot-import-v2-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**/*.glb', 'godot/assets/**/*.import', 'godot/assets/fonts/**', 'godot/assets/textures/**', 'godot/project.godot') }}
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.7.2
@@ -104,8 +114,13 @@ jobs:
       - name: Reuse the Godot import cache
         uses: actions/cache@v4
         with:
-          path: godot/.godot
-          key: godot-import-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**', 'godot/**/*.import', 'godot/project.godot') }}
+          # Godot extracts the maps' embedded textures next to the GLBs, outside .godot;
+          # they must be cached together or a cache hit leaves the map unloadable.
+          path: |
+            godot/.godot
+            godot/assets/models/Office_Chaos_*
+            godot/assets/models/Interior_07_Godot_*
+          key: godot-import-v2-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**/*.glb', 'godot/assets/**/*.import', 'godot/assets/fonts/**', 'godot/assets/textures/**', 'godot/project.godot') }}
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.7.2
