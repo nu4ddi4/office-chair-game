@@ -95,6 +95,29 @@ func clutter_checks():
 		if item.body==null and item.mesh.global_position.distance_to(item.xform.origin)<.001: home += 1
 	check(home==clutter.items.size(),"a checkpoint restore puts every desk prop back")
 
+# Push through the meeting-room door from the corridor: slow, off-centre and boosted.
+func door_run(offset_x: float, boost: bool, start_z: float) -> Dictionary:
+	await fixture(Vector3(offset_x,.015,start_z),0.0)
+	for door in game.office.doors: door.restore()
+	game.interact(); await frames(2)
+	key("forward"); key("sprint",boost)
+	var result = {"through":false,"seated_at_door":false}
+	for i in range(720):
+		await frames(1)
+		if game.chair.global_position.z<-6.2 and not result.through:
+			result.through = true; result.seated_at_door = game.boss.seated
+			break
+	game.clear_inputs()
+	return result
+
+func door_checks():
+	var slow = await door_run(0.0,false,-3.9)
+	check(slow.through and slow.seated_at_door,"a slow push opens the door and the boss stays seated")
+	var off = await door_run(-0.45,false,-1.5)
+	check(off.through and off.seated_at_door,"an off-centre approach is guided through the door frame")
+	var rammed = await door_run(0.0,true,-1.5)
+	check(rammed.through and rammed.seated_at_door,"ramming the door at boost speed bursts through without throwing the boss")
+
 func traffic_checks():
 	game.clear_inputs(); game.store.data.unlocked = 6; game.start_mission(4); await frames(30)
 	check(game.office.walkers.size()==3,"mission traffic spawns its coworkers")
@@ -193,6 +216,7 @@ func run_tests():
 	check(game.coffee.amount>98,"idle coffee is not drained by solver noise")
 	await rhythm_and_caster_checks()
 	await clutter_checks()
+	await door_checks()
 	await traffic_checks()
 	print("CHAOS_HANDLING ",JSON.stringify({"passed":failures.is_empty(),"checks":checks,"failures":failures,"metrics":metrics}))
 	game.clear_inputs(); paused = false; game.queue_free(); await process_frame; await process_frame
