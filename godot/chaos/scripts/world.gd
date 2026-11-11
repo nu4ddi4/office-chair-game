@@ -27,8 +27,12 @@ var office_scene: Node3D
 
 func build(blockout = false):
 	var layout: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://chaos/data/office_layout.json"))
+	var packed: PackedScene = null
 	if not blockout and ResourceLoader.exists("res://assets/models/Office_Chaos.glb"):
-		var scene = load("res://assets/models/Office_Chaos.glb").instantiate()
+		packed = load("res://assets/models/Office_Chaos.glb")
+		if packed==null: push_warning("Office_Chaos.glb failed to load; using the blockout office.")
+	if packed!=null:
+		var scene = packed.instantiate()
 		add_child(scene)
 		office_scene = scene
 		clutter = ChaosClutter.new(); clutter.name = "DeskClutter"; add_child(clutter)
