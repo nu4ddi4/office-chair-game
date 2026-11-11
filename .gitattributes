@@ -4,3 +4,5 @@ assets/authoring/Office_Chaos.blend filter=lfs diff=lfs merge=lfs -text
 *.sh text eol=lf
 *.desktop text eol=lf
 scripts/build-linux.py text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

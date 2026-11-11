@@ -64,6 +64,10 @@ func _ready():
 		coffee.dress(office.model("DECOR_Chaos_Mug_"))
 	boss.fell.connect(_boss_fell)
 	coffee.spilled.connect(func(amount): audio.spill(amount))
+	office.door_slammed.connect(func(strength):
+		audio.play("impact",strength); audio.play("clatter",strength*.6)
+		if store.data.settings.shake: shake = maxf(shake,.04+.07*strength))
+	office.door_banged.connect(func(strength): audio.play("impact",strength*.7))
 	office.desk_knocked.connect(func(speed): audio.play("clatter",clampf(speed/4,.4,1)))
 	player.fell.connect(func(): audio.play("impact",.5))
 	office.prop_damaged.connect(func(price):

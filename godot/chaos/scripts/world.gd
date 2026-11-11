@@ -4,6 +4,8 @@ extends Node3D
 signal prop_damaged(price: int)
 signal coworker_bumped
 signal desk_knocked(speed: float)
+signal door_slammed(strength: float)
+signal door_banged(strength: float)
 var doors: Array[ChaosDoor] = []
 var props: Array[ChaosProp] = []
 var goal: Node3D
@@ -48,6 +50,8 @@ func build(blockout = false):
 	for spec in layout.doors:
 		var door = ChaosDoor.new(); add_child(door)
 		door.build(Vector3(spec[0]-.8,0,spec[1]),0,1.6,true)
+		door.slammed.connect(func(strength): door_slammed.emit(strength))
+		door.banged.connect(func(strength): door_banged.emit(strength))
 		doors.append(door)
 	for zone in layout.zones:
 		var sign_label = ChaosShapes.label(self,zone.name,Vector3(zone.at[0],2.75,5.3 if zone.at[1]>0 else -5.3),Color("f3d494"),36)
