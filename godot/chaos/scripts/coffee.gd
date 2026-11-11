@@ -145,6 +145,9 @@ func _right() -> Vector3:
 # barely moves it; the excess pushes the liquid the other way and it rocks back.
 func _rock(delta: float):
 	var a = Vector2(filtered_acceleration.dot(_right()),filtered_acceleration.dot(_forward()))
+	# Turning: the cup swings round the turn even while the casters still slide on
+	# the old path, so the felt sideways load is speed times yaw rate.
+	a.x -= chair.angular_velocity.y*chair.linear_velocity.dot(_forward())*ChaosTuning.COFFEE_TURN_LOAD
 	var size = a.length()
 	var drive = a*(maxf(0,size-ChaosTuning.COFFEE_SLOSH_DEADZONE)/size) if size>.001 else Vector2.ZERO
 	var target = -drive*ChaosTuning.COFFEE_SLOSH_GAIN if boss.seated else Vector2.ZERO

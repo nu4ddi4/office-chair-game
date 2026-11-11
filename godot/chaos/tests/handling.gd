@@ -115,8 +115,14 @@ func door_checks():
 	check(slow.through and slow.seated_at_door,"a slow push opens the door and the boss stays seated")
 	var off = await door_run(-0.45,false,-1.5)
 	check(off.through and off.seated_at_door,"an off-centre approach is guided through the door frame")
+	var slams = [0.0]
+	var count = func(strength): slams[0] = maxf(slams[0],strength)
+	game.office.door_slammed.connect(count)
 	var rammed = await door_run(0.0,true,-1.5)
+	game.office.door_slammed.disconnect(count)
+	metrics.door_slam = slams[0]
 	check(rammed.through and rammed.seated_at_door,"ramming the door at boost speed bursts through without throwing the boss")
+	check(slams[0]>=.5,"a boosted ram lands as a hard door slam")
 
 func traffic_checks():
 	game.clear_inputs(); game.store.data.unlocked = 6; game.start_mission(4); await frames(30)
@@ -141,6 +147,16 @@ func traffic_checks():
 	var fast = await approach(walker,6.5,150)
 	metrics.fast_closest = fast.closest; metrics.fast_bumped = fast.bumped
 	check(fast.bumped,"rushing at a coworker collides before they can step aside")
+	# From the wall side (beside the coworker) they must step toward the middle, not into the chair.
+	walker.restore(); walker.pause = 99
+	var lane_z = walker.global_position.z
+	var from_wall = Vector3(walker.global_position.x,.015,lane_z+signf(lane_z)*1.9)
+	game.chair.restore(from_wall,0.0 if lane_z>0 else PI)
+	game.player.reset_pose(from_wall+Vector3(0,0,signf(lane_z)),0.0 if lane_z>0 else PI,false)
+	game.boss.sit(game.chair); game.coffee.restore(100); await frames(30)
+	var side = await approach(walker,1.0,300)
+	metrics.side_escape_z = walker.global_position.z-lane_z
+	check(not side.bumped and signf(metrics.side_escape_z)==-signf(lane_z) and absf(metrics.side_escape_z)>.8,"approached from the wall side, the coworker steps away from the chair")
 	game.clear_inputs()
 
 func run_tests():
