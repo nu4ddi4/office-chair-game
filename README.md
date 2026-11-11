@@ -54,6 +54,12 @@ godot --path godot
 
 ## 검사와 빌드
 
+### 개발 중 빠르게 실행 (Windows)
+
+- `play.bat`: 소스에서 바로 게임을 실행합니다. 빌드 과정이 없습니다.
+- `build-dev.bat`: 약 6초 만에 `chaos-dev\OfficeChairChaos.exe`를 만들고 실행합니다. 내보내기 템플릿(1.2GB)이 필요 없습니다. Godot 실행 파일 옆에 같은 이름의 게임 팩(`.pck`)을 두는 방식이며, 정식 배포 빌드는 아래 `build-game.py`로 만듭니다.
+- 둘 다 Godot 4.7.2를 `CHAOS_GODOT` 환경 변수, PATH, 저장소의 `.tools\godot` 순서로 찾습니다. 없으면 공식 GitHub 릴리스에서 받을지(약 82MB) 묻고, SHA-512를 확인한 뒤 `.tools\godot`에 둡니다. 맵 텍스처가 없다는 경고가 나오면 `git lfs pull`을 실행하세요.
+
 ```sh
 python3 scripts/test-game.py --godot /path/to/Godot-4.7.2
 # 디스플레이가 있으면 실제 렌더링 화면도 검사·저장

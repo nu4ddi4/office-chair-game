@@ -3,7 +3,8 @@ extends AnimatableBody3D
 
 # A coworker walking a fixed corridor lane. Movement is scripted (no randomness):
 # the walker paces between two points and steps aside toward the wall when the
-# chair closes in. A fast driver arrives before the walker gets out of the way.
+# chair closes in, always to the side away from the chair (and backing off when
+# the chair comes along their walking line). A fast driver still arrives first.
 
 signal bumped
 const COLORS = ["5d7f99","9a5f55","6b8a62","8a7a9e","b08a4f","4f6f78"]
@@ -13,6 +14,7 @@ var x = 0.0
 var dir = 1.0
 var pause = 0.0
 var dodge = 0.0
+var escape_z = 0.0      # where to step to, chosen away from the chair when a threat starts
 var step = 0.0
 var bump_cooldown = 0.0
 var legs: Array[Node3D] = []
@@ -50,32 +52,43 @@ func restore():
 	var a = float(spec.get("from",-10)); var b = float(spec.get("to",10))
 	x = lerpf(a,b,float(spec.get("offset",0)))
 	dir = 1.0 if b>=a else -1.0
-	pause = 0; dodge = 0; step = 0; bump_cooldown = 0
+	pause = 0; dodge = 0; step = 0; bump_cooldown = 0; escape_z = _lane()
 	_place(_lane(),0.0)
 	reset_physics_interpolation()
 
 func _place(z: float, lean: float):
 	global_transform = Transform3D(Basis(Vector3.UP,(-PI/2 if dir>0 else PI/2)+lean),Vector3(x,0,z))
 
+# Step across the corridor away from the chair; head-on, step toward the wall.
+# If that side is too close to a wall, go the other way.
+func _escape(lane: float, away: float) -> float:
+	var wall_side = 1.0 if lane>=0 else -1.0
+	var direction = signf(away) if absf(away)>.35 else wall_side
+	var target = clampf(lane+direction*ChaosTuning.TRAFFIC_STEP_ASIDE,-ChaosTuning.TRAFFIC_WALL_Z,ChaosTuning.TRAFFIC_WALL_Z)
+	if absf(target-lane)<1.0: target = clampf(lane-direction*ChaosTuning.TRAFFIC_STEP_ASIDE,-ChaosTuning.TRAFFIC_WALL_Z,ChaosTuning.TRAFFIC_WALL_Z)
+	return target
+
 func _physics_process(delta):
 	if chair==null or spec.is_empty(): return
 	var lane = _lane()
-	var side = 1.0 if lane>=0 else -1.0
-	var aside = side*3.7
 	var rel = chair.global_position-global_position; rel.y = 0
 	var distance = rel.length()
 	var closing = -chair.linear_velocity.dot(rel/distance) if distance>.01 else 0.0
 	var threat = distance<ChaosTuning.TRAFFIC_DODGE_RANGE and (closing>.4 or distance<1.7)
-	dodge = move_toward(dodge,1.0 if threat else 0.0,ChaosTuning.TRAFFIC_DODGE_SPEED*delta/absf(aside-lane))
+	if threat and dodge<.3: escape_z = _escape(lane,global_position.z-chair.global_position.z)
+	dodge = move_toward(dodge,1.0 if threat else 0.0,ChaosTuning.TRAFFIC_DODGE_SPEED*delta/maxf(absf(escape_z-lane),.5))
+	var side = signf(escape_z-lane) if absf(escape_z-lane)>.01 else 1.0
 	var speed = float(spec.get("speed",1.1))
 	var pace = 0.0 if pause>0 else (.25 if threat else 1.0)
 	pause = maxf(0,pause-delta)
 	x += dir*speed*pace*delta
+	# Coming along the walking line: back away from the chair as well.
+	if threat and absf(rel.x)>absf(rel.z): x -= signf(rel.x)*ChaosTuning.TRAFFIC_BACK_OFF*delta
 	var a = float(spec.get("from",-10)); var b = float(spec.get("to",10))
 	var low = minf(a,b); var high = maxf(a,b)
 	if x>=high and dir>0: x = high; dir = -1; pause = 1.2
 	elif x<=low and dir<0: x = low; dir = 1; pause = 1.2
-	var z = lerpf(lane,aside,smoothstep(0,1,dodge))
+	var z = lerpf(lane,escape_z,smoothstep(0,1,dodge))
 	_place(z,-side*dir*.5*dodge)
 	step += delta*(speed*pace*5.0+(3.0 if threat else 0.0))
 	for i in range(2):

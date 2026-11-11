@@ -24,6 +24,7 @@
 
 - 규칙·저장 변경: python3 scripts/test-game.py --godot PATH --suite rules
 - 물리·장면·입력 변경: 같은 명령의 --suite scene(physics·handling 포함). 밀기 조작만 빠르게 검사할 때는 --suite handling. 디스플레이가 있으면 --rendered로 실제 화면도 확인한다.
+- 수동 확인은 Windows에서 play.bat(소스 실행) 또는 build-dev.bat(템플릿 없는 dev EXE, chaos-dev/)을 쓴다. dev EXE는 배포용이 아니다.
 - 큰 변경은 --suite all 한 번. 테스트는 실제 회귀 위험을 검사하며 같은 입력을 불필요하게 재검사하지 않는다.
 - 검사기는 원본 보호 지오메트리·새 맵 배치·미션 경로 검사도 포함한다. 원본 실행 회귀는 scripts/test-map.py로 확인한다.
 - 실제 경로의 강체 충돌 검사는 godot/chaos/tests/drive.gd다. 의자에 제한된 힘을 가해 경로·문을 검사하며 플레이어 숙련도나 재미를 입증하는 검사는 아니다.
