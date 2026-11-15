@@ -105,7 +105,7 @@ godot --path godot -- --chaos-test --blockout --mission 1
 0.x 개발은 최신 `main`에서 작업 브랜치를 만들고 PR로 `main`에 합칩니다. 통합 후 성공한 `Test` 실행 ID를 지정해 게시합니다. 태그는 프로젝트 버전과 일치하는 `OfficeChairChaos-vX.Y.Z`이며 기존 SecurityLab 태그와 릴리스는 보존합니다.
 
 ```sh
-gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.1 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
+gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.2 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
 ```
 
 게시 전 검증된 게임·설치 EXE·라이선스의 SHA-256을 확인하고 설치 EXE·휴대용 ZIP·체크섬만 첨부합니다. ZIP에는 게임과 통합 라이선스가 들어갑니다. 공개된 같은 태그의 게임 파일은 덮어쓰지 않습니다. `cleanup_old_assets=true`는 0.1.0의 원본 ZIP·내부 실행 파일·라이선스 검증 후 중복 첨부만 정리하고 체크섬 목록을 갱신합니다.
