@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +17,7 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prepare(source, output, version, tag, run_id, commit, repository, highlights=""):
+def prepare(source, output, version, tag, run_id, commit, repository, highlights="", linux_source=None):
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("Expected the current GitHub repository owner/name")
     if not re.fullmatch(r'\d+\.\d+\.\d+', version) or tag != f'OfficeChairChaos-v{version}':
@@ -34,11 +35,32 @@ def prepare(source, output, version, tag, run_id, commit, repository, highlights
     for name in FILES:
         if checksums.get(name) != digest(source/name):
             raise ValueError('The verified artifact checksum does not match: '+name)
+    linux_package = None
+    linux_notes = ''
+    if linux_source is not None:
+        linux_package = linux_source / f'office-chair-chaos_{version}_amd64.deb'
+        manifest = linux_source / 'SHA256SUMS-linux.txt'
+        if not linux_package.is_file() or not manifest.is_file():
+            raise ValueError('Missing verified Debian package or checksum')
+        linux_hashes = dict((parts[1].lstrip('*'), parts[0]) for line in manifest.read_text(encoding='utf-8').splitlines()
+                            if len(parts := line.split()) == 2)
+        if linux_hashes.get(linux_package.name) != digest(linux_package):
+            raise ValueError('The verified Debian package checksum does not match')
+        with linux_package.open('rb') as stream:
+            if stream.read(8) != b'!<arch>\n':
+                raise ValueError('Expected a Debian package')
+        identity = subprocess.run(['dpkg-deb', '--show', '--showformat=${Package}\n${Version}\n${Architecture}\n', str(linux_package)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', timeout=30)
+        if identity.returncode or identity.stdout.splitlines() != ['office-chair-chaos', version, 'amd64']:
+            raise ValueError('Debian package identity, version or architecture does not match')
+        linux_notes = f'\n\n**Debian / Ubuntu (amd64)**: `{linux_package.name}`을 받아 `sudo apt install ./{linux_package.name}`로 설치하세요. 앱 메뉴 또는 `office-chair-chaos`로 실행하고, `sudo apt remove office-chair-chaos`로 제거합니다. 저장 데이터는 보존됩니다.'
     assets = output / 'assets'
     assets.mkdir(parents=True, exist_ok=True)
     if any(assets.iterdir()):
         raise ValueError('Use an empty release asset directory')
     shutil.copyfile(source / 'OfficeChairChaos-Setup.exe', assets / 'OfficeChairChaos-Setup.exe')
+    if linux_package is not None:
+        shutil.copyfile(linux_package, assets / linux_package.name)
     archive = assets / f'OfficeChairChaos-{version}-Windows-x64.zip'
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:
         for name in ('OfficeChairChaos.exe','LICENSES.txt'):
@@ -54,7 +76,7 @@ def prepare(source, output, version, tag, run_id, commit, repository, highlights
 
 ## 다운로드와 실행
 
-**OfficeChairChaos-Setup.exe**를 실행해 설치하세요. 설치형은 게임 안에서 새 버전을 확인하고, 동의 후 저장·설치·재실행할 수 있습니다. 업데이트 실패 시 이전 실행 파일로 복구합니다.\n\n설치 없이 실행하려면 **OfficeChairChaos-{version}-Windows-x64.zip**을 압축 해제하세요. Godot 설치는 필요하지 않습니다. 전체 크레딧과 라이선스는 패키지 안의 `LICENSES.txt` 및 게임의 라이선스 화면에 포함되어 있습니다.
+**Windows**: **OfficeChairChaos-Setup.exe**를 실행해 설치하세요. 설치형은 게임 안에서 새 버전을 확인하고, 동의 후 저장·설치·재실행할 수 있습니다. 업데이트 실패 시 이전 실행 파일로 복구합니다.\n\n설치 없이 실행하려면 **OfficeChairChaos-{version}-Windows-x64.zip**을 압축 해제하세요. Godot 설치는 필요하지 않습니다. 전체 크레딧과 라이선스는 패키지 안의 `LICENSES.txt` 및 게임의 라이선스 화면에 포함되어 있습니다.{linux_notes}
 
 - WASD: 자유 이동 / 마우스: 시점
 - 의자 뒤에서 E: 양손 손잡이 잡기 / 밀기 중 W/S: 전후진, A/D: 조향
@@ -71,7 +93,7 @@ def prepare(source, output, version, tag, run_id, commit, repository, highlights
 
 Linux 검사와 실제 Windows EXE 실행을 통과한 [빌드](https://github.com/{repository}/actions/runs/{run_id})를 재사용했습니다. 릴리스 대상 main 커밋: `{commit}`.
 
-Windows x64용 버전입니다. 플레이 분량·밸런스·기준 GPU 성능은 추가 실플레이 확인 대상입니다. 기존 SecurityLab 릴리스와 저장·자동 업데이트는 사용하지 않습니다.
+{'Windows x64·Debian/Ubuntu amd64' if linux_package is not None else 'Windows x64'}용 버전입니다. 플레이 분량·밸런스·기준 GPU 성능은 추가 실플레이 확인 대상입니다. 기존 SecurityLab 릴리스와 저장·자동 업데이트는 사용하지 않습니다.
 '''
     (output / 'notes.md').write_text(notes, encoding='utf-8')
     return archive
@@ -80,6 +102,7 @@ Windows x64용 버전입니다. 플레이 분량·밸런스·기준 GPU 성능�
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
+    parser.add_argument('--linux-source', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--tag', required=True)
     parser.add_argument('--run-id', required=True)
@@ -89,7 +112,7 @@ def main():
     version = re.search(r'^config/version="([^"]+)"', (ROOT / 'godot/project.godot').read_text(encoding='utf-8'), re.M).group(1)
     highlights_path = ROOT / "docs/releases" / f"{version}.md"
     highlights = highlights_path.read_text(encoding="utf-8") if highlights_path.exists() else ""
-    print(prepare(args.source, args.output, version, args.tag, args.run_id, args.commit, args.repository, highlights))
+    print(prepare(args.source, args.output, version, args.tag, args.run_id, args.commit, args.repository, highlights, args.linux_source))
 
 
 if __name__ == '__main__':

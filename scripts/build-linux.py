@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build the Linux x86_64 game: a portable tar.gz and an RPM for Fedora/RHEL.
+"""Build the Linux x86_64 game: a portable tar.gz and a Debian/Ubuntu .deb.
 
-python3 scripts/build-linux.py --godot godot [--verify] [--rpm]
+python3 scripts/build-linux.py --godot godot [--verify] [--deb]
 --verify runs the exported binary headless (Linux host only) and requires its
-runtime check to pass. --rpm needs rpmbuild (dnf install rpm-build, or apt install rpm).
+runtime check to pass. --deb needs dpkg-deb (provided by dpkg on Debian/Ubuntu).
 """
 import argparse
 import hashlib
@@ -23,45 +23,59 @@ NAME = 'office-chair-chaos'
 SMOKE = ['--headless', '--audio-driver', 'Dummy', '--fixed-fps', '120',
          '--', '--chaos-test', '--mission', '1', '--package-smoke']
 
-SPEC = """\
-%global debug_package %{{nil}}
-%global __os_install_post %{{nil}}
-%global _build_id_links none
-Name:           {name}
-Version:        {version}
-Release:        1
-Summary:        Office chair physics comedy (김 대리, 나 좀 밀어봐)
-License:        LicenseRef-OfficeChairChaos
-URL:            https://github.com/nu4ddi4/office-chair-game
-ExclusiveArch:  x86_64
-Recommends:     mesa-dri-drivers
-Recommends:     vulkan-loader
-Recommends:     libXcursor
-Recommends:     libXinerama
-Recommends:     libXrandr
-Recommends:     libXi
-Recommends:     alsa-lib
-Recommends:     pulseaudio-libs
-
-%description
-A physics ragdoll employee pushes the boss across the office on a wheeled chair
-without spilling his coffee. Single player, keyboard and mouse.
-
-%install
-mkdir -p %{{buildroot}}/opt/{name} %{{buildroot}}%{{_bindir}} %{{buildroot}}%{{_datadir}}/applications %{{buildroot}}%{{_datadir}}/icons/hicolor/256x256/apps
-install -m 0755 %{{_sourcedir}}/{binary} %{{buildroot}}/opt/{name}/{binary}
-install -m 0644 %{{_sourcedir}}/LICENSES.txt %{{buildroot}}/opt/{name}/LICENSES.txt
-printf '#!/bin/sh\\nexec /opt/{name}/{binary} "$@"\\n' > %{{buildroot}}%{{_bindir}}/{name}
-chmod 0755 %{{buildroot}}%{{_bindir}}/{name}
-install -m 0644 %{{_sourcedir}}/{name}.desktop %{{buildroot}}%{{_datadir}}/applications/{name}.desktop
-install -m 0644 %{{_sourcedir}}/{name}.png %{{buildroot}}%{{_datadir}}/icons/hicolor/256x256/apps/{name}.png
-
-%files
-/opt/{name}
-%{{_bindir}}/{name}
-%{{_datadir}}/applications/{name}.desktop
-%{{_datadir}}/icons/hicolor/256x256/apps/{name}.png
+CONTROL = """\
+Package: {name}
+Version: {version}
+Architecture: amd64
+Maintainer: Office Chair Chaos contributors <95563468+nu4ddi4@users.noreply.github.com>
+Section: games
+Priority: optional
+Installed-Size: {installed_size}
+Depends: libc6, libgcc-s1, libstdc++6, libx11-6, libxcursor1, libxinerama1, libxrandr2, libxi6, libxrender1, libasound2t64 | libasound2, libpulse0, libgl1, libvulkan1, libwayland-client0, libwayland-cursor0, libwayland-egl1, libxkbcommon0
+Recommends: libgl1-mesa-dri, mesa-vulkan-drivers, libegl1
+Homepage: https://github.com/nu4ddi4/office-chair-game
+Description: Office chair physics comedy (김 대리, 나 좀 밀어봐)
+ A physics ragdoll employee pushes the boss across the office on a wheeled chair
+ without spilling his coffee. Single player, keyboard and mouse.
 """
+
+
+def build_deb(binary, licenses, destination, version):
+    if shutil.which('dpkg-deb') is None:
+        raise RuntimeError('dpkg-deb is required for --deb')
+    if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+        raise ValueError('Expected the game semantic version')
+    package = destination / f'{NAME}_{version}_amd64.deb'
+    with tempfile.TemporaryDirectory() as temp:
+        staging = Path(temp) / 'package'
+        staging.mkdir(mode=0o755)
+        control = staging / 'DEBIAN'
+        control.mkdir()
+        files = [(binary, f'opt/{NAME}/{BINARY}', 0o755),
+                 (licenses, f'usr/share/doc/{NAME}/copyright', 0o644),
+                 (PACKAGING / (NAME+'.desktop'), f'usr/share/applications/{NAME}.desktop', 0o644),
+                 (PACKAGING / (NAME+'.png'), f'usr/share/icons/hicolor/256x256/apps/{NAME}.png', 0o644)]
+        for source, relative, mode in files:
+            target = staging / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            target.chmod(mode)
+        # One copy of the full notices, also available beside the executable.
+        (staging / f'opt/{NAME}/LICENSES.txt').symlink_to(f'/usr/share/doc/{NAME}/copyright')
+        launcher = staging / f'usr/bin/{NAME}'
+        launcher.parent.mkdir(parents=True)
+        launcher.write_text(f'#!/bin/sh\nexec /opt/{NAME}/{BINARY} "$@"\n', encoding='utf-8')
+        launcher.chmod(0o755)
+        size = sum(p.stat().st_size for p in staging.rglob('*') if not p.is_symlink() and p.is_file())
+        metadata = control / 'control'
+        metadata.write_text(CONTROL.format(name=NAME, version=version, installed_size=(size+1023)//1024), encoding='utf-8')
+        metadata.chmod(0o644)
+        for directory in [staging, *staging.rglob('*')]:
+            if not directory.is_symlink() and directory.is_dir():
+                directory.chmod(0o755)
+        # dpkg-deb packages the bytes directly; do not strip the embedded Godot PCK.
+        run(['dpkg-deb', '--root-owner-group', '--build', str(staging), str(package)])
+    return package
 
 
 def run(command, **kwargs):
@@ -81,7 +95,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--godot', default='godot')
     parser.add_argument('--verify', action='store_true')
-    parser.add_argument('--rpm', action='store_true')
+    parser.add_argument('--deb', action='store_true')
     args = parser.parse_args()
     if not run([args.godot, '--version']).strip().startswith('4.7.2.stable'):
         raise RuntimeError('Use Godot 4.7.2 stable')
@@ -121,25 +135,8 @@ def main():
                            ('install.sh', 0o755), ('uninstall.sh', 0o755)]:
             add(PACKAGING/name, name, mode)
     outputs.append(archive)
-    if args.rpm:
-        if shutil.which('rpmbuild') is None:
-            raise RuntimeError('rpmbuild is required for --rpm')
-        with tempfile.TemporaryDirectory() as temp:
-            top = Path(temp)
-            sources = top / 'SOURCES'; sources.mkdir()
-            shutil.copy2(binary, sources/BINARY)
-            shutil.copy2(licenses, sources/'LICENSES.txt')
-            shutil.copy2(PACKAGING/(NAME+'.desktop'), sources)
-            shutil.copy2(PACKAGING/(NAME+'.png'), sources)
-            spec = top / (NAME+'.spec')
-            spec.write_text(SPEC.format(name=NAME, version=version, binary=BINARY), encoding='utf-8')
-            run(['rpmbuild', '-bb', '--define', f'_topdir {top}', str(spec)])
-            built = sorted((top/'RPMS').rglob('*.rpm'))
-            if len(built) != 1:
-                raise RuntimeError('Expected exactly one RPM')
-            package = DIST / built[0].name
-            shutil.copy2(built[0], package)
-            outputs.append(package)
+    if args.deb:
+        outputs.append(build_deb(binary, licenses, DIST, version))
     outputs.append(licenses)
     (DIST/'SHA256SUMS-linux.txt').write_text(''.join(digest(p)+'  '+p.name+'\n' for p in outputs), encoding='utf-8')
     # The bare executable is already inside both packages; do not ship a third copy.

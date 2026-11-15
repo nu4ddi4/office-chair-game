@@ -50,9 +50,9 @@ func _request(url: String, limit: int):
 func begin_install():
 	if latest.is_empty() or busy(): return
 	if OS.get_name()=="Linux" and not qa:
-		# Linux builds (RPM / tar.gz) are updated by the user's package manager or a new archive.
+		# Linux builds are updated with the downloaded DEB and the user's package manager.
 		OS.shell_open("https://github.com/"+ChaosUpdatePolicy.REPOSITORY+"/releases/tag/"+str(latest.tag))
-		status = "브라우저에서 새 버전 "+str(latest.version)+"의 RPM 또는 tar.gz를 받아 주세요."; changed.emit(); return
+		status = "브라우저에서 새 버전 "+str(latest.version)+"의 .deb를 받아 설치해 주세요."; changed.emit(); return
 	if OS.get_name()!="Windows" and not qa: _fail("설치형 업데이트는 Windows에서 사용할 수 있습니다."); return
 	state = "checksum"; status = "설치 파일을 준비하고 있습니다."; changed.emit()
 	_request(latest.checksum_url,65536)
