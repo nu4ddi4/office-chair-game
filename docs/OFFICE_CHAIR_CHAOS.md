@@ -85,9 +85,9 @@ PC 싱글플레이, 연결된 6개 미션, 사실적 사무실과 인형 캐릭�
 
 Inno Setup 6.7.3은 사용자별 설치·바로 가기·제거와 제품 식별 파일을 제공한다. 설치형은 Windows PowerShell 보조 도구의 준비 응답을 받은 뒤 종료한다. 보조 도구는 부모 종료·설치 파일 해시·제품 경로를 확인하고 기존 제품 파일만 백업한다. 무인 설치 후 실제 새 게임 장면과 첫 프레임의 버전 확인을 기다린다. 실패 시 이전 파일·제거 표시 버전을 복원하고 이전 게임을 재실행한다. 사용자 저장은 교체하거나 제거하지 않는다. 휴대용에는 설치 식별 파일을 넣지 않으며, 업데이트 동의 시 대화형 설치를 연다.
 
-릴리즈 첨부는 설치 EXE·휴대용 ZIP·체크섬 세 개다. 크레딧·Godot 및 제삼자·폰트 라이선스 전문을 LICENSES.txt로 합쳐 배포하고 게임에서도 전문을 표시한다. 원본 고지는 소스에서 유지한다.
+릴리즈 첨부는 Windows 설치 EXE·휴대용 ZIP, Linux DEB, 공통 체크섬 네 개다. 크레딧·Godot 및 제삼자·폰트 라이선스 전문을 LICENSES.txt로 합쳐 배포하고 게임에서도 전문을 표시한다. 원본 고지는 소스에서 유지한다.
 
-Linux x86_64는 Fedora·RHEL 계열을 기준으로 RPM과 휴대용 tar.gz를 만든다. RPM은 게임을 `/opt/office-chair-chaos`에, 실행 명령 `office-chair-chaos`, 데스크톱 항목과 256px 아이콘을 표준 위치에 설치한다. 내장 PCK가 손상되지 않도록 RPM 빌드의 strip·debuginfo 처리를 끈다. 그래픽·오디오·X11 라이브러리는 약한 의존성(Recommends)으로 둔다. tar.gz에는 게임·LICENSES.txt·README·데스크톱 항목·아이콘과 사용자별 `install.sh`/`uninstall.sh`가 있다. Linux에서는 설치형 자동 업데이트를 하지 않고, 시작 시 새 버전을 확인해 알린 뒤 업데이트 버튼이 릴리스 페이지를 연다. 저장 위치는 `~/.local/share/OfficeChairChaos`이며 패키지 제거로 지우지 않는다.
+Linux amd64는 Debian·Ubuntu를 기준으로 DEB와 휴대용 tar.gz를 만든다. `dpkg-deb --root-owner-group --build`로 게임을 `/opt/office-chair-chaos`에, 실행 명령·데스크톱 항목·아이콘·라이선스를 표준 위치에 설치한다. 바이너리를 strip하지 않아 내장 PCK를 보존한다. `Depends`에 그래픽·오디오·X11·Wayland 라이브러리를 선언하고 Mesa 드라이버는 `Recommends`로 둔다. `libasound2t64 | libasound2`로 Ubuntu 24.04와 Debian 12의 패키지 이름 차이를 처리한다. tar.gz에는 게임·LICENSES.txt·README·데스크톱 항목·아이콘과 사용자별 설치·제거 스크립트가 있다. Linux 업데이트는 새 DEB를 직접 설치한다. 저장 위치는 `~/.local/share/OfficeChairChaos`이며 패키지 제거로 지우지 않는다.
 
 ## 검사와 배포
 
@@ -96,15 +96,15 @@ Linux x86_64는 Fedora·RHEL 계열을 기준으로 RPM과 휴대용 tar.gz를 �
 - handling.gd: 실제 E·마우스 손잡이 선택, 카메라와 독립된 전진·조향, 직진 부스트 안정성·속도 차이, 고속 회전/충돌 낙하, 부드러운 주행의 무손실·부스트 출렁임·충돌 쏟음, 한 손 해제, 복도 동료의 보행·저속 접근 시 비켜서기·고속 접근 시 충돌, 박자 맞춘 흔들기의 커피 쏟음, 후진 시 캐스터 회전과 옆 밀림, 책상 충돌 시 소품 이탈·파손액·예산·복구. `--suite scene`에도 포함한다.
 - updates.gd: 버전·제품·출처 검증, 동의 전 다운로드 방지, 체크섬·취소·오프라인·저장 실패, 기존 설정 호환.
 - tests/windows/installer-update.ps1: 실제 설치·실행 확인·업데이트 성공·건강 확인 실패 복구·손상 설치 파일 거부·제거와 저장 보존. Windows PowerShell에서 실행한다.
-- CI linux: Ubuntu에서 Linux 내보내기·RPM·tar.gz를 만들고 내보낸 실행 파일의 패키지 자체 검사를 통과해야 한다. 이어서 같은 작업에서 `tests/linux/fedora-check.sh`로 최신 Fedora 컨테이너에서 RPM을 dnf로 설치해 데스크톱 항목·아이콘을 확인하고, 설치된 명령과 tar.gz의 실행 파일로 각각 자체 검사를 통과한 뒤 제거까지 확인한다.
-- CI 구성: test·windows·linux 세 작업은 서로 기다리지 않고 동시에 돈다. Release는 Test 실행 전체의 성공을 요구하므로 검증 기준은 같다. 각 작업은 에셋·import 설정 해시로 Godot import 결과(`godot/.godot`)를 캐시한다. Linux 아티팩트에는 RPM·tar.gz·LICENSES.txt·체크섬만 두고 실행 파일을 따로 넣지 않는다.
-- tests/release: 세 개의 첨부·설치 파일 해시·휴대용 라이선스 및 구버전 정리 전 보존 ZIP 검증.
+- CI linux: Ubuntu에서 DEB·tar.gz를 만들고 내보낸 실행 파일의 패키지 자체 검사를 수행한다. `tests/linux/debian-check.sh`로 Debian 12·Ubuntu 24.04 컨테이너에서 apt로 설치해 데스크톱 항목·아이콘·라이선스를 확인한다. 설치된 명령과 tar.gz를 각각 실행하고, 설치 바이너리의 원본 일치와 purge 후 저장 보존을 검사한다.
+- CI 구성: test·windows·linux 세 작업은 서로 기다리지 않고 동시에 돈다. Release는 Test 실행 전체의 성공을 요구하므로 검증 기준은 같다. 각 작업은 에셋·import 설정 해시로 Godot import 결과(`godot/.godot`)를 캐시한다. Linux 아티팩트에는 DEB·tar.gz·LICENSES.txt·체크섬만 두고 실행 파일을 따로 넣지 않는다.
+- tests/release: Windows·DEB 첨부·설치 파일 해시·휴대용 라이선스 및 구버전 정리 전 보존 ZIP 검증.
 - drive.gd: 제한된 힘으로 적재 의자를 경로 위로 이동시켜 실제 지형·문 통과를 검사한다. 시간 제한 미션은 2.4m/s, 온도 미션은 1.9m/s, 나머지는 1.1m/s로 민다. 사람 조작이나 게임 재미 검증과 구분한다.
 - check-chaos-assets.py: 새 GLB의 가구·충돌 노드, 미션별 체크포인트 수, 모든 경로의 벽 여유 검사.
 - godot-asset-test.mjs 및 test-map.py: 원본 맵 보호 지오메트리와 실행 회귀.
 
 렌더링 검사는 실제 장면에서 메뉴·첫 운반·걷기·밀기·설정 화면을 저장한다. 소프트웨어 렌더링 환경의 화면 확인을 지정 GPU의 성능 검증으로 취급하지 않는다.
 
-Windows 내보내기는 새 게임 자원·필요한 사무실 재질·한국어 폰트만 포함한다. 기존 맵 실행·옛 제품 코드·검사 장면은 배포에서 제외한다. EXE는 패키지 자체 검사로 실제 확장 맵 로드와 물리 안정 상태를 확인한다. Test CI에서 Windows 실행을 확인한 빌드를 아티팩트로 제공하며 자동 공개 릴리스는 하지 않는다. 명시적 게시 요청은 main 전용 Release 워크플로로 처리한다. 성공한 Test의 소스가 main의 조상이고 게임·빌드 입력이 같은지 확인한 뒤, 검증된 EXE를 재빌드 없이 가져와 체크섬 검증·ZIP 포장·초안 업로드·전체 첨부 확인 후 공개한다. 이전 제품 릴리스와 공개된 같은 태그는 덮어쓰지 않는다.
+Windows 내보내기는 새 게임 자원·필요한 사무실 재질·한국어 폰트만 포함한다. 기존 맵 실행·옛 제품 코드·검사 장면은 배포에서 제외한다. EXE는 패키지 자체 검사로 실제 확장 맵 로드와 물리 안정 상태를 확인한다. Test CI에서 Windows 실행을 확인한 빌드를 아티팩트로 제공하며 자동 공개 릴리스는 하지 않는다. 명시적 게시 요청은 main 전용 Release 워크플로로 처리한다. 성공한 Test의 소스가 main의 조상이고 게임·빌드 입력이 같은지 확인한 뒤, 검증된 Windows·DEB를 재빌드 없이 가져와 체크섬 검증·ZIP 포장·초안 업로드·전체 첨부 확인 후 공개한다. 이전 제품 릴리스와 공개된 같은 태그는 덮어쓰지 않는다.
 
 사람이 확인할 항목은 처음 조작을 이해하는지, 실패가 웃긴지, 코너 제동을 학습할 수 있는지, 전체 분량이 목표 범위인지, 반복 플레이가 재미있는지다. 이 항목들은 구현 또는 자동 테스트만으로 완료 판정하지 않는다.

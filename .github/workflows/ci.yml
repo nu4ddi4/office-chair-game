@@ -126,14 +126,16 @@ jobs:
           version: 4.7.2
           use-dotnet: false
           include-templates: true
-      - name: Install rpmbuild
-        run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: Check Debian packaging tools
+        run: dpkg-deb --version
       - name: Import, export and verify the Linux build
         run: |
           godot --headless --path godot --editor --import --quit
-          python3 scripts/build-linux.py --godot godot --verify --rpm
-      - name: Install, run and remove the RPM on Fedora
-        run: docker run --rm -v "$PWD:/repo:ro" fedora:latest bash /repo/tests/linux/fedora-check.sh
+          python3 scripts/build-linux.py --godot godot --verify --deb
+      - name: Install, run and purge the DEB on Debian 12
+        run: docker run --rm -v "$PWD:/repo:ro" debian:bookworm-slim bash /repo/tests/linux/debian-check.sh
+      - name: Install, run and purge the DEB on Ubuntu 24.04
+        run: docker run --rm -v "$PWD:/repo:ro" ubuntu:24.04 bash /repo/tests/linux/debian-check.sh
       - uses: actions/upload-artifact@v4
         with:
           name: OfficeChairChaos-Linux-x64

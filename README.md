@@ -8,11 +8,11 @@
 
 설치형은 게임 시작 시 새 안정 버전을 알리고 설정 → 업데이트에서 설치할 수 있습니다. 동의 후 진행 저장·다운로드·SHA-256 검증·설치·재실행을 수행하며 실행 확인에 실패하면 이전 파일로 복구합니다. 자동 확인은 설정에서 끌 수 있고, 오프라인에서도 게임을 계속할 수 있습니다. 휴대용 버전은 동의 후 설치 프로그램을 엽니다.
 
-### Fedora·RHEL 계열 Linux (x86_64)
+### Debian·Ubuntu Linux (amd64)
 
-CI의 `OfficeChairChaos-Linux-x64` 아티팩트에 RPM과 휴대용 tar.gz가 들어 있습니다(정식 릴리스 첨부는 아직 Windows만). Fedora에서는 `sudo dnf install ./office-chair-chaos-<버전>-1.x86_64.rpm` 후 앱 메뉴의 Office Chair Chaos를 실행하거나 `office-chair-chaos`를 입력하세요. 제거는 `sudo dnf remove office-chair-chaos`입니다. 다른 배포판은 tar.gz를 풀어 `OfficeChairChaos.x86_64`를 실행하거나 `install.sh`로 사용자 계정에 설치합니다. Vulkan 또는 OpenGL 3.3 드라이버(Mesa)가 필요합니다. Linux에서는 자동 설치 업데이트 대신 게임의 업데이트 화면이 릴리스 페이지를 엽니다. 진행은 `~/.local/share/OfficeChairChaos`에 저장되며 제거해도 남습니다.
+릴리즈의 `office-chair-chaos_<버전>_amd64.deb`를 받아 `sudo apt install ./office-chair-chaos_<버전>_amd64.deb`로 설치하세요. 앱 메뉴의 Office Chair Chaos 또는 `office-chair-chaos`로 실행하고, `sudo apt remove office-chair-chaos`로 제거합니다. Debian 12·Ubuntu 24.04 컨테이너에서 설치·실행·제거와 저장 보존을 검사합니다. CI의 `OfficeChairChaos-Linux-x64` 아티팩트에는 DEB와 휴대용 tar.gz가 들어 있습니다. Vulkan 또는 OpenGL 3.3 드라이버(Mesa)가 필요합니다. Linux에서는 새 버전의 DEB를 직접 받아 설치합니다. 진행은 `~/.local/share/OfficeChairChaos`에 저장되며 제거해도 남습니다.
 
-릴리즈 첨부는 설치 EXE·휴대용 ZIP·SHA256SUMS.txt 세 개입니다. 자산·엔진·폰트의 크레딧과 라이선스 전문은 패키지의 LICENSES.txt 및 게임의 라이선스 화면에 있습니다. 제거해도 진행·설정은 보존합니다.
+릴리즈 첨부는 Windows 설치 EXE·휴대용 ZIP, Linux DEB, 공통 SHA256SUMS.txt 네 개입니다. 자산·엔진·폰트의 크레딧과 라이선스 전문은 패키지의 LICENSES.txt 및 게임의 라이선스 화면에 있습니다. 제거해도 진행·설정은 보존합니다.
 
 ## 소스에서 실행
 
@@ -66,8 +66,8 @@ python3 scripts/test-game.py --godot /path/to/Godot-4.7.2
 python3 scripts/test-game.py --godot /path/to/Godot-4.7.2 --rendered
 # 원본 사무실의 보호 지오메트리·이동·문 회귀 검사
 python3 scripts/test-map.py --godot /path/to/Godot-4.7.2
-# Linux(내보내기 템플릿·rpmbuild 필요): RPM·tar.gz 생성과 실행 검사
-python3 scripts/build-linux.py --godot godot --verify --rpm
+# Linux(내보내기 템플릿·dpkg-deb 필요): DEB·tar.gz 생성과 실행 검사
+python3 scripts/build-linux.py --godot godot --verify --deb
 # Windows 내보내기 템플릿 설치 후 휴대용 EXE 생성
 python3 scripts/build-game.py --godot /path/to/Godot-4.7.2
 # Windows에서 고정된 Inno Setup 6.7.3으로 설치형 생성·실행 검사
@@ -76,7 +76,7 @@ python scripts/build-game.py --godot /path/to/Godot-4.7.2 --verify --installer -
 powershell -NoProfile -File tests/windows/installer-update.ps1
 ```
 
-검사 결과와 화면은 `chaos-results/`, EXE·설치 프로그램·통합 라이선스·체크섬은 `chaos-dist/`에 생성합니다. CI는 Linux 검사와 동시에 실제 Windows PowerShell에서 설치·업데이트·실패 복구·제거까지 검증하고 다운로드 가능한 아티팩트를 만듭니다. 자동 공개 릴리스·Android 배포는 없습니다. 명시적으로 요청한 정식 릴리스는 main의 수동 `Release` 워크플로로 게시합니다. 성공한 `Test` 실행의 Windows 아티팩트와 main의 게임 입력이 같은지 확인하고 기존 EXE를 그대로 재사용합니다.
+검사 결과와 화면은 `chaos-results/`, EXE·설치 프로그램·통합 라이선스·체크섬은 `chaos-dist/`에 생성합니다. CI는 Linux 검사와 동시에 실제 Windows PowerShell에서 설치·업데이트·실패 복구·제거까지 검증하고 다운로드 가능한 아티팩트를 만듭니다. 자동 공개 릴리스·Android 배포는 없습니다. 명시적으로 요청한 정식 릴리스는 main의 수동 `Release` 워크플로로 게시합니다. 성공한 `Test` 실행의 Windows·Linux 아티팩트와 main의 게임·패키징 입력이 같은지 확인하고 기존 EXE를 그대로 재사용합니다.
 
 ## 맵 제작과 개발
 
@@ -105,7 +105,7 @@ godot --path godot -- --chaos-test --blockout --mission 1
 0.x 개발은 최신 `main`에서 작업 브랜치를 만들고 PR로 `main`에 합칩니다. 통합 후 성공한 `Test` 실행 ID를 지정해 게시합니다. 태그는 프로젝트 버전과 일치하는 `OfficeChairChaos-vX.Y.Z`이며 기존 SecurityLab 태그와 릴리스는 보존합니다.
 
 ```sh
-gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.1 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
+gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.2 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
 ```
 
-게시 전 검증된 게임·설치 EXE·라이선스의 SHA-256을 확인하고 설치 EXE·휴대용 ZIP·체크섬만 첨부합니다. ZIP에는 게임과 통합 라이선스가 들어갑니다. 공개된 같은 태그의 게임 파일은 덮어쓰지 않습니다. `cleanup_old_assets=true`는 0.1.0의 원본 ZIP·내부 실행 파일·라이선스 검증 후 중복 첨부만 정리하고 체크섬 목록을 갱신합니다.
+게시 전 검증된 게임·설치 EXE·라이선스의 SHA-256을 확인하고 Windows 설치 EXE·휴대용 ZIP, Linux DEB, 공통 체크섬을 첨부합니다. ZIP에는 게임과 통합 라이선스가 들어갑니다. 공개된 같은 태그의 게임 파일은 덮어쓰지 않습니다. `cleanup_old_assets=true`는 0.1.0의 원본 ZIP·내부 실행 파일·라이선스 검증 후 중복 첨부만 정리하고 체크섬 목록을 갱신합니다.
