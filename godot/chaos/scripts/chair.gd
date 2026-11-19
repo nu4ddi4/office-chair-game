@@ -1,6 +1,8 @@
 class_name ChaosChair
 extends RigidBody3D
 
+const REAR_HANDLES = [Vector3(-.28,1.02,.30),Vector3(.28,1.02,.30)]
+
 var wheels: Array[Node3D] = []
 var slippery = false
 var braked = false
@@ -58,7 +60,7 @@ func _ready():
 	mat.bounce = .05
 	physics_material_override = mat
 	add_to_group("chaos_grabbable")
-	set_meta("grip_points",[Vector3(-.28,1.02,.30),Vector3(.28,1.02,.30),Vector3(-.39,.76,0),Vector3(.39,.76,0)])
+	set_meta("grip_points",REAR_HANDLES + [Vector3(-.39,.76,0),Vector3(.39,.76,0)])
 	ChaosShapes.collision(self,Vector3(.65,.13,.61),Vector3(0,.60,0))
 	ChaosShapes.collision(self,Vector3(.62,.57,.13),Vector3(0,.92,.25))
 	ChaosShapes.collision(self,Vector3(.72,.16,.72),Vector3(0,.08,0))

@@ -9,10 +9,12 @@ signal door_banged(strength: float)
 var doors: Array[ChaosDoor] = []
 var props: Array[ChaosProp] = []
 var goal: Node3D
+var goal_ring: TorusMesh
 var goal_label: Label3D
 var route_markers: Array[Node3D] = []
 var wet: MeshInstance3D
 var fan: Node3D
+var wind_ribbon: MeshInstance3D
 var fan_blades: Node3D
 var coffee_points: Array[Vector3] = []
 var clock = 0.0
@@ -64,8 +66,11 @@ func build(blockout = false):
 		ChaosShapes.label(self,"커피 보충 · E",point+Vector3(-2,1.7,0),Color("f4ca78"),30)
 	for i in range(12):
 		var prop = ChaosProp.new(); add_child(prop)
-		var x = [-21,-9,3,15,27][i%5]
-		prop.build(Vector3(x,.3,-2.8 if i<6 else 3.0),i%2)
+		var x = [-21,-13,-9,3,15,27][i%6]
+		var z = -2.8 if i<6 else 3.0
+		if i==0: z = -1.05
+		if i==7: z = 1.15
+		prop.build(Vector3(x,.3,z),i%2)
 		prop.damaged.connect(func(price): prop_damaged.emit(price))
 		props.append(prop)
 	wet = ChaosShapes.box(self,Vector3(15,.012,0),Vector3(10,.012,3.5),Color(.38,.61,.66,.65))
@@ -75,14 +80,15 @@ func build(blockout = false):
 	fan = Node3D.new(); add_child(fan); fan.position = Vector3(28,0,-8)
 	ChaosShapes.box(fan,Vector3(0,.7,0),Vector3(.25,1.4,.25),Color("5c6868"))
 	ChaosShapes.box(fan,Vector3(0,.08,0),Vector3(.8,.15,.8),Color("414f56"))
+	wind_ribbon = ChaosShapes.box(fan,Vector3(-.45,1.7,0),Vector3(.8,.08,.02),Color("e6b847"))
 	fan_blades = Node3D.new(); fan.add_child(fan_blades); fan_blades.position.y = 1.5
 	for i in range(3):
 		var blade = ChaosShapes.box(fan_blades,Vector3.ZERO,Vector3(.10,1.2,.10),Color("b6c1be"))
 		blade.rotation.z = TAU*i/3.0
 	ChaosShapes.label(self,"송풍 구간 →",Vector3(24,2.5,-6),Color("f4ca78"),36)
 	goal = Node3D.new(); add_child(goal)
-	var ring = TorusMesh.new(); ring.inner_radius = 1.1; ring.outer_radius = 1.25
-	var marker = MeshInstance3D.new(); marker.mesh = ring; marker.material_override = ChaosShapes.material(Color("edbd5c"))
+	goal_ring = TorusMesh.new()
+	var marker = MeshInstance3D.new(); marker.mesh = goal_ring; marker.material_override = ChaosShapes.material(Color("edbd5c"))
 	goal.add_child(marker); marker.position.y = .025
 	goal_label = ChaosShapes.label(goal,"",Vector3(0,2.2,0),Color("ffe2a1"),42)
 	goal_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -165,7 +171,9 @@ func apply_quality(quality: int):
 	environment.glow_enabled = quality>=1
 	environment.ssil_enabled = quality>=2
 
-func set_goal(point: Vector3, title: String):
+func set_goal(point: Vector3, title: String, radius: float):
+	goal_ring.inner_radius = radius-.08
+	goal_ring.outer_radius = radius
 	goal.position = point
 	goal_label.text = title
 
@@ -190,7 +198,11 @@ func set_traffic(spec: Array, chair: Node3D):
 func _physics_process(delta):
 	clock += delta
 	for i in range(background_arms.size()): background_arms[i].rotation.x = .9+sin(clock*3+i)*.035
-	fan_blades.rotation.z += delta*(22 if hazards else 0)
+	var gust = wind_strength()
+	fan_blades.rotation.z += delta*(4+22*gust)
+	var angle = lerpf(1.4,.08,gust)
+	wind_ribbon.rotation.z = angle
+	wind_ribbon.position = Vector3(-.4*cos(angle),1.7-.4*sin(angle),0)
 	wet.visible = hazards
 	fan.visible = hazards
 
@@ -204,6 +216,9 @@ func guide_doors(chair: ChaosChair):
 		if absf(local.z)<ChaosTuning.DOOR_GUIDE_RANGE and absf(off)<.8 and velocity.z*local.z<0:
 			chair.apply_central_force(door.global_basis.x*clampf(-off*ChaosTuning.DOOR_GUIDE,-160,160))
 
+func wind_strength() -> float:
+	return maxf(0,sin(clock*1.2))
+
 func apply_hazards(actor: ChaosRagdoll, chair: ChaosChair):
 	if not actor.boss: guide_doors(chair)
 	var at = chair.global_position
@@ -211,7 +226,7 @@ func apply_hazards(actor: ChaosRagdoll, chair: ChaosChair):
 	var actor_at = actor.center()
 	actor.slippery = (hazards and actor_at.x>10 and actor_at.x<20 and absf(actor_at.z)<2) or (coffee!=null and coffee.on_puddle(actor_at))
 	if hazards and actor.center().x>21 and actor.center().x<27 and actor.center().z<-5 and actor.center().z>-11:
-		var pulse = maxf(0,sin(clock*1.2))
+		var pulse = wind_strength()
 		for body in actor.bodies.values(): body.apply_central_force(Vector3.LEFT*body.mass*2.8*pulse)
 		if not actor.boss: chair.apply_central_force(Vector3.LEFT*35*pulse)
 

@@ -2,7 +2,7 @@ class_name ChaosUpdatePolicy
 extends RefCounted
 
 const PRODUCT = "OfficeChairChaos"
-const REPOSITORY = "nu4ddi4/office-zirral"
+const REPOSITORY = "nu4ddi4/office-chair-game"
 const RELEASES_URL = "https://api.github.com/repos/"+REPOSITORY+"/releases?per_page=20"
 const INSTALLER = "OfficeChairChaos-Setup.exe"
 const STAMP = "office-chair.install.json"
@@ -24,7 +24,7 @@ static func newer(candidate: String, current: String) -> bool:
 		if a[i]!=b[i]: return a[i]>b[i]
 	return false
 
-static func select_release(payload, current: String) -> Dictionary:
+static func select_release(payload, current: String, debian = false) -> Dictionary:
 	if not payload is Array: return {}
 	var best = {}
 	for release in payload:
@@ -36,15 +36,16 @@ static func select_release(payload, current: String) -> Dictionary:
 		var assets = release.get("assets",[])
 		if not assets is Array: continue
 		var prefix = "https://github.com/"+REPOSITORY+"/releases/download/"+tag+"/"
+		var package = "office-chair-chaos_%s_amd64.deb" % candidate if debian else INSTALLER
 		var installer = {}; var checksum = {}
 		for asset in assets:
 			if not asset is Dictionary: continue
 			var name = str(asset.get("name",""))
 			if str(asset.get("browser_download_url",""))!=prefix+name: continue
-			if name==INSTALLER and ChaosSave.number(asset.get("size",0),1,MAX_DOWNLOAD): installer=asset
+			if name==package and ChaosSave.number(asset.get("size",0),1,MAX_DOWNLOAD): installer=asset
 			if name=="SHA256SUMS.txt" and ChaosSave.number(asset.get("size",0),1,65536): checksum=asset
 		if installer.is_empty() or checksum.is_empty(): continue
-		best = {"version":candidate,"tag":tag,"installer_url":prefix+INSTALLER,"checksum_url":prefix+"SHA256SUMS.txt","size":int(installer.size)}
+		best = {"version":candidate,"tag":tag,"installer_url":prefix+package,"checksum_url":prefix+"SHA256SUMS.txt","size":int(installer.size)}
 	return best
 
 static func checksum(text: String) -> String:

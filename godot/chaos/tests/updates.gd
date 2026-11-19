@@ -22,7 +22,7 @@ func check(value: bool, label: String):
 	if not value: failures.append(label)
 func release_info(ver = "0.2.0") -> Dictionary:
 	var tag = "OfficeChairChaos-v"+ver
-	var prefix = "https://github.com/nu4ddi4/office-zirral/releases/download/"+tag+"/"
+	var prefix = "https://github.com/nu4ddi4/office-chair-game/releases/download/"+tag+"/"
 	return {"tag_name":tag,"draft":false,"prerelease":false,"assets":[{"name":"OfficeChairChaos-Setup.exe","size":fixture_bytes.size(),"browser_download_url":prefix+"OfficeChairChaos-Setup.exe"},{"name":"SHA256SUMS.txt","size":100,"browser_download_url":prefix+"SHA256SUMS.txt"}]}
 func service() -> ChaosUpdater:
 	var owner = FakeGame.new(); root.add_child(owner); owners.append(owner)
@@ -46,6 +46,12 @@ func run_tests():
 	check(not ChaosUpdatePolicy.newer("1.2.3-beta.1","0.1.1"),"stable versions only")
 	var candidate = ChaosUpdatePolicy.select_release([release_info()],"0.1.1")
 	check(candidate.get("version","")=="0.2.0","select new product installer")
+	var linux_release = release_info()
+	check(ChaosUpdatePolicy.select_release([linux_release],"0.1.2",true).is_empty(),"Linux needs a matching DEB")
+	var deb = "office-chair-chaos_0.2.0_amd64.deb"
+	var deb_url = "https://github.com/nu4ddi4/office-chair-game/releases/download/OfficeChairChaos-v0.2.0/"+deb
+	linux_release.assets = [linux_release.assets[1],{"name":deb,"size":512,"browser_download_url":deb_url}]
+	check(ChaosUpdatePolicy.select_release([linux_release],"0.1.2",true).get("installer_url","")==deb_url,"Linux opens the verified versioned DEB URL")
 	var legacy = release_info(); legacy.tag_name="SecurityLab-0.2.0"
 	check(ChaosUpdatePolicy.select_release([legacy],"0.1.1").is_empty(),"legacy product ignored")
 	var unsafe = release_info(); unsafe.assets[0].browser_download_url="https://example.com/setup.exe"

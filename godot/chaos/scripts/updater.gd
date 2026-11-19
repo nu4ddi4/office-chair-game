@@ -51,7 +51,9 @@ func begin_install():
 	if latest.is_empty() or busy(): return
 	if OS.get_name()=="Linux" and not qa:
 		# Linux builds are updated with the downloaded DEB and the user's package manager.
-		OS.shell_open("https://github.com/"+ChaosUpdatePolicy.REPOSITORY+"/releases/tag/"+str(latest.tag))
+		if OS.shell_open(latest.installer_url)!=OK:
+			_fail("브라우저를 열 수 없습니다. 릴리즈 페이지에서 .deb를 받아 주세요.")
+			return
 		status = "브라우저에서 새 버전 "+str(latest.version)+"의 .deb를 받아 설치해 주세요."; changed.emit(); return
 	if OS.get_name()!="Windows" and not qa: _fail("설치형 업데이트는 Windows에서 사용할 수 있습니다."); return
 	state = "checksum"; status = "설치 파일을 준비하고 있습니다."; changed.emit()
@@ -74,7 +76,7 @@ func _completed(result: int, code: int, _headers: PackedStringArray, body: Packe
 			var parser = JSON.new()
 			if parser.parse(body.get_string_from_utf8())!=OK or not parser.data is Array:
 				_fail("업데이트 응답을 읽지 못했습니다."); return
-			latest = ChaosUpdatePolicy.select_release(parser.data,current_version)
+			latest = ChaosUpdatePolicy.select_release(parser.data,current_version,OS.get_name()=="Linux" and not qa)
 			state = "available" if not latest.is_empty() else "current"
 			status = "새 버전 %s이 있습니다." % latest.version if not latest.is_empty() else "최신 버전입니다."
 			changed.emit()
