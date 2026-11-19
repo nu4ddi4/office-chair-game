@@ -111,6 +111,13 @@ func door_run(offset_x: float, boost: bool, start_z: float) -> Dictionary:
 	return result
 
 func door_checks():
+	await fixture()
+	var door: ChaosDoor = game.office.doors[0]
+	door.interact(door.global_position+Vector3.BACK)
+	await frames(180)
+	var opened = absf(door.leaf.rotation.y)
+	await frames(1440)
+	check(opened>.3 and absf(door.leaf.rotation.y)<.25,"unobstructed door closes after the hold interval")
 	var slow = await door_run(0.0,false,-3.9)
 	check(slow.through and slow.seated_at_door,"a slow push opens the door and the boss stays seated")
 	var off = await door_run(-0.45,false,-1.5)
@@ -224,7 +231,7 @@ func run_tests():
 		var event = InputEventMouseButton.new(); event.button_index = button; event.pressed = true
 		game._unhandled_input(event)
 	await frames(2)
-	check(game.player.pushing,"ordinary mouse grabs select chair handles rather than the seated boss")
+	check(game.player.pushing and game.player.holding_handles(),"ordinary mouse grabs select chair handles rather than the seated boss")
 	game.player.release(0); await frames(2)
 	check(not game.player.pushing and not game.chair.driving,"releasing one hand exits vehicle steering")
 	game.player.release_all()

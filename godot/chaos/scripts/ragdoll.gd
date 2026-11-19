@@ -2,6 +2,7 @@ class_name ChaosRagdoll
 extends Node3D
 
 signal fell
+signal grip_broken(index: int)
 signal grip_changed
 
 var bodies: Dictionary = {}
@@ -180,7 +181,8 @@ func _seat_dynamics(delta: float):
 	if seat_grace>0: return
 	var local_accel = chair.global_basis.inverse()*seat_acceleration
 	var angle = rad_to_deg(acos(clampf(chair.global_basis.y.dot(Vector3.UP),-1,1)))
-	var turn_load = Vector2(chair.linear_velocity.x,chair.linear_velocity.z).length()*absf(chair.angular_velocity.y)
+	var speed = Vector2(chair.linear_velocity.x,chair.linear_velocity.z).length()
+	var turn_load = speed*absf(chair.angular_velocity.y)*(1.0+.22*smoothstep(ChaosTuning.PUSH_SPEED,ChaosTuning.PUSH_BOOST_SPEED,speed))
 	# Doors are meant to be pushed through: a door contact is softer than a wall.
 	var door = chair.has_method("touching_door") and chair.touching_door()
 	var brake_limit = ChaosTuning.SEAT_BRAKE_ACCEL+(ChaosTuning.DOOR_SEAT_ALLOWANCE if door else 0.0)
@@ -241,7 +243,7 @@ func _pose(sitting: bool, _delta: float):
 		if key == "torso":
 			angle = clampf(-local_velocity.z*.065,-.35,.35) + sin(phase*.65)*.025 + lean
 			roll = clampf(-local_velocity.x*.065,-.22,.22) + sin(phase*.4)*.035
-			strength = 340.0 if pushing else 245.0 if bracing else 170.0
+			strength = lerpf(340.0,275.0,clampf((desired_velocity.length()-ChaosTuning.PUSH_SPEED)/3,0,1)) if pushing else 245.0 if bracing else 170.0
 		elif key == "pelvis": strength = 280.0 if pushing else 200.0
 		elif key == "head": strength = 18.0; angle = -.05
 		elif key.begins_with("thigh"):
@@ -254,7 +256,7 @@ func _pose(sitting: bool, _delta: float):
 		elif key.begins_with("upper") or key.begins_with("lower"):
 			var index = 0 if key.ends_with("l") else 1
 			angle = .65 if sitting else (.9 if grips[index]!=null else -sin(phase+PI*index)*.30*moving)
-			strength = 32.0 if pushing else 19.0
+			strength = 27.0 if pushing else 19.0
 			if sitting and gesture=="point" and index==0: angle = 1.5
 			if sitting and gesture=="drink" and index==1: angle = 1.15 if key.begins_with("upper") else 1.7
 		elif key.begins_with("hand"): strength = 4.0
@@ -271,6 +273,11 @@ func try_grab(index: int, preferred: RigidBody3D = null) -> bool:
 	if grips[index]!=null:
 		release(index); return false
 	var hand: RigidBody3D = bodies["hand_l" if index==0 else "hand_r"]
+	if (preferred==null or preferred==chair) and at_chair_back():
+		var anchor: Vector3 = ChaosChair.REAR_HANDLES[index]
+		if handle_reachable(hand,anchor) and (grips[1-index]!=chair or grip_anchors[1-index]!=anchor):
+			attach_hand(index,chair,anchor)
+			return true
 	var candidates = [preferred] if preferred != null else get_tree().get_nodes_in_group("chaos_grabbable")
 	var best: RigidBody3D
 	var best_anchor = Vector3.ZERO
@@ -279,6 +286,7 @@ func try_grab(index: int, preferred: RigidBody3D = null) -> bool:
 		if not is_instance_valid(candidate) or candidate.freeze: continue
 		var anchors: Array = candidate.get_meta("grip_points",[Vector3.ZERO])
 		for anchor in anchors:
+			if candidate==chair and grips[1-index]==chair and grip_anchors[1-index]==anchor: continue
 			var point: Vector3 = candidate.global_transform*anchor
 			var d = hand.global_position.distance_to(point)
 			if d > distance: continue
@@ -287,11 +295,26 @@ func try_grab(index: int, preferred: RigidBody3D = null) -> bool:
 			if not hit.is_empty() and hit.collider != candidate: continue
 			distance = d; best = candidate; best_anchor = anchor
 	if best == null: return false
-	grips[index] = best
-	grip_anchors[index] = best_anchor
-	hand.add_collision_exception_with(best)
-	grip_changed.emit()
+	attach_hand(index,best,best_anchor)
 	return true
+
+func attach_hand(index: int, body: RigidBody3D, anchor: Vector3):
+	if body.get_parent() is ChaosDoor: body.get_parent().hold_handle()
+	grips[index] = body
+	grip_anchors[index] = anchor
+	bodies["hand_l" if index==0 else "hand_r"].add_collision_exception_with(body)
+	grip_changed.emit()
+
+func holding_handles() -> bool:
+	if grips[0]!=chair or grips[1]!=chair or grip_anchors[0]==grip_anchors[1]:
+		return false
+	return grip_anchors[0] in ChaosChair.REAR_HANDLES and grip_anchors[1] in ChaosChair.REAR_HANDLES
+
+func handle_reachable(hand: RigidBody3D, anchor: Vector3) -> bool:
+	var point = chair.global_transform*anchor
+	if hand.global_position.distance_to(point)>ChaosTuning.HANDLE_REACH: return false
+	var ray = PhysicsRayQueryParameters3D.create(hand.global_position,point,ChaosTuning.FLOOR|ChaosTuning.DOOR)
+	return get_world_3d().direct_space_state.intersect_ray(ray).is_empty()
 
 func at_chair_back() -> bool:
 	if fallen or not is_instance_valid(chair) or chair.global_basis.y.dot(Vector3.UP)<.65: return false
@@ -300,23 +323,18 @@ func at_chair_back() -> bool:
 
 func can_grab_handles() -> bool:
 	if not at_chair_back(): return false
-	var anchors = [Vector3(-.28,1.02,.30),Vector3(.28,1.02,.30)]
+	var anchors = ChaosChair.REAR_HANDLES
 	for i in range(2):
 		var hand: RigidBody3D = bodies["hand_l" if i==0 else "hand_r"]
-		var point: Vector3 = chair.global_transform*anchors[i]
-		if hand.global_position.distance_to(point)>ChaosTuning.HANDLE_REACH: return false
-		var hit = get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(hand.global_position,point,ChaosTuning.FLOOR|ChaosTuning.DOOR))
-		if not hit.is_empty(): return false
+		if not handle_reachable(hand,anchors[i]): return false
 	return true
 
 func grab_handles() -> bool:
 	if not can_grab_handles(): return false
-	var anchors = [Vector3(-.28,1.02,.30),Vector3(.28,1.02,.30)]
+	var anchors = ChaosChair.REAR_HANDLES
 	release_all()
 	for i in range(2):
-		grips[i] = chair; grip_anchors[i] = anchors[i]
-		bodies["hand_l" if i==0 else "hand_r"].add_collision_exception_with(chair)
-	grip_changed.emit()
+		attach_hand(i,chair,anchors[i])
 	return true
 
 func _update_grips(delta: float):
@@ -330,7 +348,9 @@ func _update_grips(delta: float):
 		var break_distance = ChaosTuning.PUSH_BREAK_DISTANCE if pushing and other==chair else ChaosTuning.BREAK_DISTANCE
 		grip_strain[i] = clampf(offset.length()/break_distance,0,1)
 		if offset.length()>break_distance:
-			release(i); continue
+			release(i)
+			grip_broken.emit(i)
+			continue
 		var other_velocity = other.linear_velocity+other.angular_velocity.cross(point-other.global_position)
 		var force = (offset*650.0+(other_velocity-hand.linear_velocity)*24.0).limit_length(420 if pushing else 330)
 		hand.apply_central_force(force)
@@ -344,6 +364,7 @@ func _update_grips(delta: float):
 
 func release(index: int):
 	if is_instance_valid(grips[index]):
+		if grips[index].get_parent() is ChaosDoor: grips[index].get_parent().release_handle()
 		bodies["hand_l" if index==0 else "hand_r"].remove_collision_exception_with(grips[index])
 	grips[index] = null
 	grip_strain[index] = 0

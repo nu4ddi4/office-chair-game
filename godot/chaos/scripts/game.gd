@@ -19,6 +19,7 @@ var updates: ChaosUpdater
 var yaw = 0.0
 var pitch = .36
 var look_idle = 0.0
+var reset_consumed = false
 var reset_hold = 0.0
 var distance_timer = 0.0
 var escaping = false
@@ -69,6 +70,7 @@ func _ready():
 		if store.data.settings.shake: shake = maxf(shake,.04+.07*strength))
 	office.door_banged.connect(func(strength): audio.play("impact",strength*.7))
 	office.desk_knocked.connect(func(speed): audio.play("clatter",clampf(speed/4,.4,1)))
+	player.grip_broken.connect(func(index): ui.show_hand_loss(index))
 	player.fell.connect(func(): audio.play("impact",.5))
 	office.prop_damaged.connect(func(price):
 		if run!=null and run.phase=="playing": run.damage += price; audio.play("shatter",.85))
@@ -131,25 +133,30 @@ func continue_game():
 
 func start_mission(id: int, saved: Dictionary = {}):
 	if id<1 or id>int(store.data.unlocked): return
-	run = ChaosMissionRun.new(); run.begin(missions[id-1],saved); escaping = false
-	checkpoint_state = run.snapshot(float(saved.get("coffee",0 if run.mission.get("requires_refill",false) else 100)))
-	_restore_checkpoint(); ui.field(); ui.say(run.mission.intro,6); persist_checkpoint()
+	run = ChaosMissionRun.new(); run.begin(missions[id-1],saved)
+	escaping = saved.get("escaping",false)
+	checkpoint_state = run.snapshot(float(saved.get("coffee",0 if run.mission.get("requires_refill",false) else 100)),float(saved.get("temperature",ChaosTuning.COFFEE_HOT)))
+	checkpoint_state.escaping = escaping
+	_restore_checkpoint(); ui.field(); ui.say("업무 끝. 이제 출구로 가세요." if escaping else run.mission.intro,6); persist_checkpoint()
 
 func _checkpoint_origin() -> Vector3:
+	if escaping: return ChaosMissions.point(run.mission.route[-1].at)
 	if run.checkpoint==0: return ChaosMissions.point(run.mission.start)
 	return ChaosMissions.point(run.mission.route[run.checkpoint-1].at)
 
 func _restore_checkpoint():
 	player.release_all(); boss.release_all(); boss.detach_seat(false); office.restore()
 	var origin = _checkpoint_origin()+Vector3(0,.015,0)
-	var destination = ChaosMissions.point(run.mission.route[run.checkpoint].at)
+	var destination = exit_point if escaping else ChaosMissions.point(run.mission.route[run.checkpoint].at)
 	var direction = destination-origin; direction.y = 0
 	var facing = atan2(-direction.x,-direction.z) if direction.length()>.1 else 0.0
 	chair.restore(origin,facing)
 	player.reset_pose(origin+Basis(Vector3.UP,facing)*Vector3(0,0,1.0),facing,false)
 	boss.sit(chair); coffee.restore(float(checkpoint_state.coffee),float(checkpoint_state.get("temperature",ChaosTuning.COFFEE_HOT)))
-	run.index = run.checkpoint; run.park_time = 0; run.phase = "playing"; run.reason = ""
+	run.index = run.checkpoint; run.park_time = 0; run.phase = "success" if escaping else "playing"; run.reason = ""
 	run.remaining = float(checkpoint_state.remaining); run.refilled = bool(checkpoint_state.refilled)
+	for door in office.doors:
+		door.set_latched(run.mission.get("one_hand_doors",false))
 	office.hazards = run.mission.get("hazards",false)
 	office.set_traffic(run.mission.get("traffic",[]),chair)
 	yaw = facing; pitch = .36; camera_target = player.center()+Vector3(0,.5,0); _update_camera(1)
@@ -158,10 +165,10 @@ func _restore_checkpoint():
 
 func retry():
 	if run==null: return
-	run.retries += 1; escaping = false; _restore_checkpoint(); ui.field(); ui.say("괜찮아. 회사 물건이잖아.",3)
+	run.retries += 1; escaping = checkpoint_state.get("escaping",false); _restore_checkpoint(); ui.field(); ui.say("괜찮아. 회사 물건이잖아.",3)
 
 func persist_checkpoint() -> bool:
-	if run==null or checkpoint_state.is_empty() or run.phase=="success": return store.write()
+	if run==null or checkpoint_state.is_empty() or (run.phase=="success" and not escaping): return store.write()
 	var saved = checkpoint_state.duplicate(true)
 	saved.elapsed = run.elapsed; saved.falls = run.falls; saved.damage = run.damage; saved.retries = run.retries
 	store.data.resume = saved
@@ -170,8 +177,11 @@ func persist_checkpoint() -> bool:
 	return saved_ok
 
 func _update_goal():
+	if escaping:
+		office.set_goal(exit_point,"퇴근 · 출구",1.8)
+		return
 	var waypoint: Dictionary = run.mission.route[run.index]
-	office.set_goal(ChaosMissions.point(waypoint.at),waypoint.label)
+	office.set_goal(ChaosMissions.point(waypoint.at),waypoint.label,waypoint.get("radius",1.65))
 
 func _physics_process(delta):
 	if not ready_for_play or ui.mode!="field" or get_tree().paused or run==null: return
@@ -182,10 +192,14 @@ func _physics_process(delta):
 	if escaping:
 		if player.center().distance_to(exit_point+Vector3(0,.92,0))<1.8: _finish()
 	else: _handle_progress(run.tick(delta,chair.global_position,chair.linear_velocity.length(),boss.seated,coffee.amount,coffee.temperature))
-	if Input.is_action_pressed("chaos_reset"):
+	if not Input.is_action_pressed("chaos_reset"):
+		reset_consumed = false
+		reset_hold = 0
+	elif not reset_consumed:
 		reset_hold += delta
-		if reset_hold>=1: retry()
-	else: reset_hold = 0
+		if reset_hold>=1:
+			reset_consumed = true
+			retry()
 	if chair.global_position.y< -3 or player.center().y< -3 or boss.center().y< -3:
 		retry(); ui.say("여긴 지하 주차장이 아닌데.")
 	distance_timer += delta
@@ -207,7 +221,7 @@ func _physics_process(delta):
 			get_tree().quit(0 if passed else 1)
 
 func _update_locomotion(delta: float, axes: Vector2):
-	var both_handles = player.grips[0]==chair and player.grips[1]==chair
+	var both_handles = player.holding_handles()
 	if not both_handles or player.fallen or chair.global_basis.y.dot(Vector3.UP)<.6:
 		player.pushing = false
 	elif not player.pushing and player.at_chair_back():
@@ -237,7 +251,13 @@ func _handle_progress(event: String):
 	if event=="success":
 		ui.say(run.mission.outro,5)
 		if int(run.mission.id)==6:
-			escaping=true; player.release_all(); office.set_goal(exit_point,"퇴근 · 출구")
+			escaping = true
+			player.release_all()
+			run.checkpoint = run.index
+			checkpoint_state = run.snapshot(coffee.amount,coffee.temperature)
+			checkpoint_state.escaping = true
+			_update_goal()
+			persist_checkpoint()
 		else: _finish()
 		return
 	if event=="checkpoint":
@@ -317,7 +337,7 @@ func context() -> Dictionary:
 	var near=player.center().distance_to(chair.global_position)<2.6
 	if near and chair.global_basis.y.dot(Vector3.UP)<.65 and _visible(chair.global_position+Vector3.UP*.8): return {"kind":"right","text":"의자 세우기"}
 	if near and not boss.seated and boss.center().distance_to(chair.global_position)<1.5 and chair.linear_velocity.length()<.30 and _visible(chair.global_position+Vector3.UP*.9): return {"kind":"seat","text":"부장님 다시 태우기"}
-	if near and coffee.amount<99 and chair.linear_velocity.length()<.25:
+	if near and (coffee.amount<99 or coffee.temperature<float(run.mission.get("min_temp",0))) and chair.linear_velocity.length()<.25:
 		for point in office.coffee_points:
 			if point.distance_to(chair.global_position)<3 and _visible(point+Vector3.UP): return {"kind":"coffee","text":"커피 보충"}
 	var nearest: ChaosDoor
@@ -326,7 +346,11 @@ func context() -> Dictionary:
 		var point: Vector3=door.leaf.global_position
 		var d=point.distance_to(player.center())
 		if d<distance and _visible(point,door.leaf): nearest=door; distance=d
-	if nearest!=null: return {"kind":"door","text":"문 밀기","target":nearest}
+	if nearest!=null and not nearest.latched and not player.pushing and nearest.opened_for>0 and player.can_grab_handles():
+		return {"kind":"push","text":"양손으로 다시 밀기"}
+	if nearest!=null:
+		var one_hand = nearest.latched and player.pushing
+		return {"kind":"door","text":"한 손 놓고 문 밀기" if one_hand else "문 밀기","target":nearest,"one_hand":one_hand}
 	if player.pushing: return {"kind":"release","text":"의자 놓기"}
 	if player.can_grab_handles(): return {"kind":"push","text":"손잡이 잡고 앞으로 밀기"}
 	return {}
@@ -347,7 +371,11 @@ func interact():
 		"coffee":
 			coffee.refill(); run.refilled=true
 			checkpoint_state.coffee=100; checkpoint_state.temperature=coffee.temperature; checkpoint_state.refilled=true; persist_checkpoint(); ui.say("가득. 아주 가득.")
-		"door": action.target.interact(player.center())
+		"door":
+			if action.one_hand:
+				player.release(0)
+				player.pushing = false
+			action.target.interact(player.center())
 		"right", "seat":
 			var query=PhysicsShapeQueryParameters3D.new()
 			var shape=BoxShape3D.new(); shape.size=Vector3(1.0,1.75,1.15)

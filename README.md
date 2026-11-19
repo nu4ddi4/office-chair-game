@@ -4,7 +4,9 @@
 
 ## 다운로드·설치·업데이트
 
-[최신 릴리즈](https://github.com/nu4ddi4/office-zirral/releases/latest)의 **OfficeChairChaos-Setup.exe**를 실행하세요. 관리자 권한 없이 사용자 계정에 설치하며 시작 메뉴와 제거 기능을 제공합니다. 설치가 필요 없으면 Windows-x64.zip을 압축 해제해 실행하세요.
+[최신 릴리즈](https://github.com/nu4ddi4/office-chair-game/releases/latest)의 **OfficeChairChaos-Setup.exe**를 실행하세요. 관리자 권한 없이 사용자 계정에 설치하며 시작 메뉴와 제거 기능을 제공합니다. 설치가 필요 없으면 Windows-x64.zip을 압축 해제해 실행하세요.
+
+0.1.1·0.1.2 사용자는 수정 버전을 처음 한 번 릴리즈 페이지에서 직접 설치해 주세요.
 
 설치형은 게임 시작 시 새 안정 버전을 알리고 설정 → 업데이트에서 설치할 수 있습니다. 동의 후 진행 저장·다운로드·SHA-256 검증·설치·재실행을 수행하며 실행 확인에 실패하면 이전 파일로 복구합니다. 자동 확인은 설정에서 끌 수 있고, 오프라인에서도 게임을 계속할 수 있습니다. 휴대용 버전은 동의 후 설치 프로그램을 엽니다.
 
@@ -44,11 +46,11 @@ godot --path godot
 ## 여섯 가지 업무
 
 1. **김 대리, 나 좀 밀어봐** — 걷기·잡기·제동과 첫 운반.
-2. **커피 식겠다** — 커피를 보충하고 최소 20%를 남겨 회의실에 도착.
+2. **커피 식겠다** — 커피를 보충하고 60%·60°C 이상으로 회의실에 도착.
 3. **문 좀 잡아줘** — 닫히는 문을 통과해 자료실에 갔다가 돌아오기.
-4. **회의 시작했대** — 구간당 60초 안에 회의실로 운반.
+4. **회의 시작했대** — 구간당 27초 안에 회의실로 운반.
 5. **바람 좀 쐬자** — 미끄럼과 송풍, 후반 지정 구간의 낙하 금지.
-6. **마지막으로 딱 하나만** — 구간당 90초와 커피 10% 조건을 지키고 퇴근.
+6. **마지막으로 딱 하나만** — 구간당 27초와 커피 45%·45°C 조건을 지키고 퇴근.
 
 진행·설정은 새 제품 전용 `OfficeChairChaos` 사용자 폴더에 저장합니다. 이전 게임의 사용자 데이터는 읽거나 변경하지 않습니다. 체크포인트에서 안전한 자세로 계속하며, 재도전해도 누적 운행 시간·파손·낙하 기록은 유지됩니다.
 
@@ -98,14 +100,14 @@ godot --path godot -- --chaos-test --blockout --mission 1
 
 ## 기존 게임 보관
 
-기존 조사·터미널 게임은 [legacy/pre-reboot](https://github.com/nu4ddi4/office-zirral/tree/legacy/pre-reboot)에 있습니다. 기존 맵 원본 `Security_Lab_Interior_07.blend`와 `Interior_07_Godot.glb`는 자산 원천으로 보존하며, 새 게임은 별도 맵을 사용합니다. 원본 맵 확인 장면 `godot/scenes/office.tscn`은 회귀 검사와 에셋 확인용이며 새 게임 메뉴에 포함하지 않습니다.
+기존 조사·터미널 게임은 [legacy/pre-reboot](https://github.com/nu4ddi4/office-chair-game/tree/legacy/pre-reboot)에 있습니다. 기존 맵 원본 `Security_Lab_Interior_07.blend`와 `Interior_07_Godot.glb`는 자산 원천으로 보존하며, 새 게임은 별도 맵을 사용합니다. 원본 맵 확인 장면 `godot/scenes/office.tscn`은 회귀 검사와 에셋 확인용이며 새 게임 메뉴에 포함하지 않습니다.
 
 ## 정식 릴리스
 
 0.x 개발은 최신 `main`에서 작업 브랜치를 만들고 PR로 `main`에 합칩니다. 통합 후 성공한 `Test` 실행 ID를 지정해 게시합니다. 태그는 프로젝트 버전과 일치하는 `OfficeChairChaos-vX.Y.Z`이며 기존 SecurityLab 태그와 릴리스는 보존합니다.
 
 ```sh
-gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.2 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
+gh workflow run release.yml --ref main -f tag=OfficeChairChaos-v0.1.3 -f source_run_id=SUCCESSFUL_TEST_RUN_ID
 ```
 
 게시 전 검증된 게임·설치 EXE·라이선스의 SHA-256을 확인하고 Windows 설치 EXE·휴대용 ZIP, Linux DEB, 공통 체크섬을 첨부합니다. ZIP에는 게임과 통합 라이선스가 들어갑니다. 공개된 같은 태그의 게임 파일은 덮어쓰지 않습니다. `cleanup_old_assets=true`는 0.1.0의 원본 ZIP·내부 실행 파일·라이선스 검증 후 중복 첨부만 정리하고 체크섬 목록을 갱신합니다.

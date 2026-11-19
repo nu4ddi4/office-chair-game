@@ -7,6 +7,8 @@ var leaf: RigidBody3D
 var touching: Dictionary = {}
 var bang_cooldown = 0.0
 var hinge: HingeJoint3D
+var gripping_hands = 0
+var latched = false
 var closing = false
 var opened_for = 0.0
 var origin_yaw = 0.0
@@ -33,10 +35,23 @@ func build(at: Vector3, yaw: float, width = 1.6, auto_close = true):
 	hinge.node_a = hinge.get_path_to(mount)
 	hinge.node_b = hinge.get_path_to(leaf)
 	hinge.set_flag(HingeJoint3D.FLAG_USE_LIMIT,true)
-	hinge.set_param(HingeJoint3D.PARAM_LIMIT_LOWER,-1.7)
-	hinge.set_param(HingeJoint3D.PARAM_LIMIT_UPPER,1.7)
+	set_latched(false)
+
+func set_latched(value: bool):
+	latched = value
+	var limit = 0.0 if value else 1.7
+	hinge.set_param(HingeJoint3D.PARAM_LIMIT_LOWER,-limit)
+	hinge.set_param(HingeJoint3D.PARAM_LIMIT_UPPER,limit)
+
+func hold_handle():
+	gripping_hands += 1
+	if latched: set_latched(false)
+
+func release_handle():
+	gripping_hands = maxi(0,gripping_hands-1)
 
 func interact(from: Vector3):
+	if latched: set_latched(false)
 	var side = signf((global_basis.inverse()*(from-global_position)).z)
 	leaf.apply_torque_impulse(Vector3.UP*side*25)
 	opened_for = 2.5
@@ -44,7 +59,7 @@ func interact(from: Vector3):
 # Anything leaning on the leaf (the chair, the boss's knees, the employee) swings
 # it open in the push direction and keeps the closer off while in contact.
 func _physics_process(delta):
-	if leaf == null: return
+	if leaf == null or latched: return
 	opened_for = maxf(0,opened_for-delta)
 	bang_cooldown = maxf(0,bang_cooldown-delta)
 	var now: Dictionary = {}
@@ -56,6 +71,9 @@ func _physics_process(delta):
 			now[body.get_instance_id()] = true
 			if body is ChaosChair and not touching.has(body.get_instance_id()): _slam(body,side)
 	touching = now
+	if closing and opened_for<=0 and gripping_hands==0:
+		var displacement = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
+		leaf.apply_torque(Vector3.UP*(-displacement*8.0-leaf.angular_velocity.y*3.0))
 	# The leaf hitting its stop after a hard swing.
 	var angle = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
 	var spin = absf(leaf.angular_velocity.y)
@@ -74,9 +92,6 @@ func _slam(chair: RigidBody3D, side: float):
 	chair.apply_central_impulse(-travel*speed*chair.mass*ChaosTuning.DOOR_SLAM_PUSHBACK)
 	opened_for = maxf(opened_for,2.0)
 	slammed.emit(clampf((speed-ChaosTuning.DOOR_SLAM_SPEED)/3.0+.3,.3,1.0))
-	if closing and opened_for<=0:
-		var angle = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
-		leaf.apply_torque(Vector3.UP*(-angle*8.0-leaf.angular_velocity.y*3.0))
 
 func restore():
 	# Re-seat the hinge around the teleported leaf so the joint starts from the closed pose.

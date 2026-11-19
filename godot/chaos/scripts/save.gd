@@ -41,6 +41,8 @@ static func valid(candidate) -> bool:
 		if not number(resume.coffee,0,100) or not number(resume.remaining,-1,90) or not number(resume.elapsed,0,1e8) or not resume.refilled is bool: return false
 		for key in ["falls","damage","retries"]:
 			if not number(resume[key],0,1e12): return false
+		if not resume.get("escaping",false) is bool: return false
+		if resume.get("escaping",false) and (int(resume.mission)!=6 or int(resume.checkpoint)!=missions[5].route.size()-1): return false
 		if resume.has("temperature") and not number(resume.temperature,0,100): return false
 	for key in candidate.records:
 		if key not in ["1","2","3","4","5","6"]: return false
