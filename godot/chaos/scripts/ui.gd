@@ -511,6 +511,13 @@ func say(text: String, seconds = 4.0):
 
 # ---------------------------------------------------------------- Per frame
 
+var loose_hand = ""
+var hand_notice_time = 0.0
+
+func show_hand_loss(index: int):
+	loose_hand = "왼손이 풀렸습니다" if index==0 else "오른손이 풀렸습니다"
+	hand_notice_time = 1.4
+
 func _process(delta):
 	if mode=="updates": refresh_updates(); return
 	if mode=="main" and game.run==null:
@@ -542,7 +549,8 @@ func _process(delta):
 	if game.player.pushing:
 		speed_label.text = "%.1f" % game.chair.linear_velocity.length()
 		boost_pill.modulate.a = 1.0 if game.chair.boosting else 0.0
-	var warning = ""
+	hand_notice_time = maxf(0,hand_notice_time-delta)
+	var warning = loose_hand if hand_notice_time>0 else ""
 	if game.player.pushing and not game.boss.seated: warning = "부장님 낙하!"
 	elif game.player.pushing and game.boss.seat_risk>.25: warning = "부장님 휘청!"
 	alert_time = alert_time+delta if not warning.is_empty() else 0.0
@@ -561,13 +569,15 @@ func _update_coffee(run: ChaosMissionRun):
 	cup.show_heat = run.mission.has("min_temp")
 	if not run.refilled:
 		coffee_amount.text = "비어 있음"
-		coffee_need.text = "탕비실에서 E로 채우기"
+		coffee_need.text = "탕비실에서 %s로 채우기" % game.key_hint("interact")
 		coffee_heat.text = ""; coffee_state.text = ""
 		return
 	coffee_amount.text = "%d%%" % int(coffee.amount)
 	var short = coffee.amount<float(run.mission.min_coffee)
 	coffee_amount.add_theme_color_override("font_color",ChaosStyle.DANGER if short else ChaosStyle.ON_GLASS)
 	coffee_need.text = "최소 %d%%" % int(run.mission.min_coffee) if float(run.mission.min_coffee)>0 else "흘리지 않게 조심"
+	if short or coffee.temperature<float(run.mission.get("min_temp",0)):
+		coffee_need.text = "탕비실에서 보충 · 최소 %d%%" % int(run.mission.min_coffee)
 	if cup.show_heat:
 		var need = float(run.mission.min_temp)
 		coffee_heat.text = "%d°C  /  최소 %d°C" % [int(coffee.temperature),int(need)]
@@ -628,7 +638,7 @@ func notices():
 
 func updates_menu():
 	mode = "updates"
-	clear("업데이트","현재 버전 "+game.updates.current_version+"  ·  "+("설치형" if game.updates.installed else "휴대용"),620)
+	clear("업데이트","현재 버전 "+game.updates.current_version+"  ·  "+("Linux amd64" if OS.get_name()=="Linux" else "설치형" if game.updates.installed else "휴대용"),620)
 	update_label = ChaosStyle.label(column,game.updates.status,17,560)
 	update_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; update_label.custom_minimum_size.x = 520
 	_space(8)
@@ -636,7 +646,7 @@ func updates_menu():
 	update_progress.max_value = 1; update_progress.custom_minimum_size.y = 10; update_progress.show_percentage = false
 	_space(10)
 	update_check_button = button("업데이트 확인",func(): game.updates.check_for_updates())
-	update_install_button = button("다운로드하고 설치",confirm_update,game.updates.latest.is_empty(),true)
+	update_install_button = button(".deb 받기" if OS.get_name()=="Linux" else "다운로드하고 설치",confirm_update,game.updates.latest.is_empty(),true)
 	button("다운로드 취소",func(): game.updates.cancel_download())
 	var values: Dictionary = game.store.data.settings
 	_choice("시작할 때 확인","켜짐" if values.get("auto_updates",true) else "꺼짐",func(): values.auto_updates=not values.get("auto_updates",true); game.store.write(); updates_menu())
@@ -654,6 +664,11 @@ func refresh_updates():
 func confirm_update():
 	if game.updates.latest.is_empty() or game.updates.busy(): return
 	mode = "update_confirm"
+	if OS.get_name()=="Linux":
+		clear("새 버전을 받을까요?","브라우저에서 Debian·Ubuntu용 설치 파일을 받습니다. 내려받은 폴더에서 sudo apt install ./office-chair-chaos_%s_amd64.deb 로 설치하세요." % game.updates.latest.version,620)
+		button(".deb 받기",func(): game.updates.begin_install(); updates_menu(),false,true)
+		button("나중에",updates_menu).grab_focus()
+		return
 	clear("새 버전을 설치할까요?","버전 "+str(game.updates.latest.version)+"을 다운로드합니다. 진행을 저장하고 게임을 종료한 뒤 설치합니다.\n"+("설치 후 게임을 다시 실행합니다. 실패하면 이전 버전으로 복구합니다." if game.updates.installed else "설치 화면에서 설치 위치를 확인할 수 있습니다. 기존 진행은 유지됩니다."),620)
 	button("다운로드하고 설치",func(): game.updates.begin_install(); updates_menu(),false,true)
 	button("나중에",updates_menu).grab_focus()

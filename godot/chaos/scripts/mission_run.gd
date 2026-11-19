@@ -39,10 +39,10 @@ func tick(delta: float, at: Vector3, speed: float, seated: bool, coffee: float, 
 	var last = index==mission.route.size()-1
 	if last and speed>=ChaosTuning.PARK_SPEED:
 		park_time = 0; return ""
-	park_time += delta
-	if park_time < (ChaosTuning.PARK_HOLD if last else .18): return ""
-	park_time = 0
 	if last:
+		park_time += delta
+		if park_time<ChaosTuning.PARK_HOLD: return ""
+		park_time = 0
 		if coffee<float(mission.min_coffee): return fail("커피가 부족합니다. 최소 %d%%가 필요합니다." % mission.min_coffee)
 		if temperature<float(mission.get("min_temp",0)): return fail("커피가 식었습니다. %d°C 이상이어야 합니다." % int(mission.min_temp))
 		phase = "success"; return "success"

@@ -1,5 +1,5 @@
 ﻿#ifndef GameVersion
-  #define GameVersion "0.1.2"
+  #define GameVersion "0.1.3"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\chaos-dist"

@@ -92,6 +92,17 @@ func run_tests():
 		if id in [2,6]:
 			check(game.context().get("kind","")=="coffee","mission %d refill prompt" % id)
 			game.interact(); check(game.run.refilled and game.coffee.amount==100,"mission %d refill" % id)
+	game.start_mission(2)
+	var warm_save = game.run.snapshot(75,62)
+	warm_save.checkpoint = 1
+	warm_save.refilled = true
+	game.start_mission(2,warm_save)
+	check(is_equal_approx(game.coffee.temperature,62.0),"continue restores checkpoint temperature")
+	Input.action_press("chaos_reset")
+	await frames(280)
+	Input.action_release("chaos_reset")
+	check(game.run.retries==1,"one continuous reset press retries once")
+	game.start_mission(6)
 	var started = Time.get_ticks_msec()
 	var sounds = ChaosAudio.synthesize()
 	metrics.audio_synth_ms = Time.get_ticks_msec()-started
@@ -116,7 +127,14 @@ func run_tests():
 	check(game.camera.fov==70,"camera settings")
 	metrics.active_bodies=game.player.bodies.size()+game.boss.bodies.size()+game.office.props.size()+game.office.doors.size()+2+ChaosClutter.MAX_AWAKE
 	check(metrics.active_bodies<=ChaosTuning.ACTIVE_BODY_BUDGET,"body budget")
-	game.ui.field(); game.run.phase="success"; game.escaping=true
+	game.ui.field()
+	game.run.index = game.run.mission.route.size()-1
+	game.run.refilled = true
+	game.run.phase = "success"
+	game._handle_progress("success")
+	game.store.load_progress()
+	game.continue_game()
+	check(game.escaping and game.office.goal.global_position==game.exit_point,"continue resumes the walk to the exit")
 	game.player.reset_pose(game.exit_point,0,false)
 	await frames(3)
 	check(game.ui.mode=="result" and 6 in game.store.data.completed,"walking to exit completes the ending")
