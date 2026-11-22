@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tarfile
@@ -14,6 +15,7 @@ import zipfile
 PROJECT = Path(__file__).resolve().parent
 REPO = PROJECT.parent.parent
 VERSION = "4.7.2.stable"
+PACKAGE_NAME = "tiny-office"
 DISTRIBUTIONS = {
     "server": ("Linux Server", "tiny-office-server", ".tar.gz"),
     "linux": ("Linux Client", "tiny-office", ".tar.gz"),
@@ -63,6 +65,8 @@ def archive_distribution(kind, executable, work, output):
         shutil.copy2(PROJECT / "server.example.cfg", bundle / "server.example.cfg")
     else:
         notices += b"\n\n" + (REPO / "godot" / "assets" / "fonts" / "OFL.txt").read_bytes()
+    if kind == "windows":
+        shutil.copy2(PROJECT / "install-windows.cmd", bundle / "install-windows.cmd")
     (bundle / "LICENSES.txt").write_bytes(notices)
     target = output / (folder + extension)
     if extension == ".zip":
@@ -75,12 +79,64 @@ def archive_distribution(kind, executable, work, output):
     return target
 
 
+def build_deb(bundle, work):
+    project_config = (PROJECT / "project.godot").read_text(encoding="utf-8")
+    version = re.search(r'^config/version="(\d+\.\d+\.\d+)"$', project_config, re.MULTILINE)
+    if version is None:
+        raise ValueError("Expected a semantic config/version in project.godot")
+    version = version.group(1)
+    staging = work / "debian"
+    files = (
+        (bundle / "tiny-office", "usr/bin/tiny-office", 0o755),
+        (bundle / "LICENSES.txt", "usr/share/doc/tiny-office/copyright", 0o644),
+        (bundle / "README.md", "usr/share/doc/tiny-office/README.md", 0o644),
+        (PROJECT / "tiny-office.desktop", "usr/share/applications/tiny-office.desktop", 0o644),
+    )
+    installed_size = 0
+    for source, relative_path, mode in files:
+        destination = staging / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        destination.chmod(mode)
+        installed_size += destination.stat().st_size
+
+    control = staging / "DEBIAN/control"
+    control.parent.mkdir()
+    control.write_text(
+        f"""Package: {PACKAGE_NAME}
+Version: {version}
+Architecture: amd64
+Maintainer: Tiny Office contributors <95563468+nu4ddi4@users.noreply.github.com>
+Section: games
+Priority: optional
+Installed-Size: {(installed_size + 1023) // 1024}
+Depends: libc6, libgcc-s1, libstdc++6, libfontconfig1, libx11-6, libxcursor1, libxinerama1, libxrandr2, libxi6, libxrender1, libasound2t64 | libasound2, libpulse0, libgl1, libvulkan1, libwayland-client0, libwayland-cursor0, libwayland-egl1, libxkbcommon0
+Recommends: libgl1-mesa-dri, libegl1
+Description: Tiny Office two-player cooperative prototype
+ Two tiny people work together to escape an office.
+""",
+        encoding="utf-8",
+    )
+    # A restrictive build umask must not limit access to installed directories.
+    for directory in (staging, *(path for path in staging.rglob("*") if path.is_dir())):
+        directory.chmod(0o755)
+    control.chmod(0o644)
+    package = work / f"{PACKAGE_NAME}_{version}_amd64.deb"
+    subprocess.run(["dpkg-deb", "--root-owner-group", "--build", staging, package], check=True)
+    return package
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", default="godot")
     parser.add_argument("--templates", type=Path, help="Extracted 4.7.2 release templates on Linux")
     parser.add_argument("--target", choices=["all", *DISTRIBUTIONS], default="all")
+    parser.add_argument("--deb", action="store_true", help="Also package the Linux client as an amd64 DEB")
     args = parser.parse_args()
+    if args.deb and args.target not in ("all", "linux"):
+        parser.error("--deb requires the Linux client")
+    if args.deb and shutil.which("dpkg-deb") is None:
+        parser.error("--deb requires dpkg-deb")
     if not godot(args.godot, "--version").strip().startswith(VERSION):
         raise RuntimeError("Godot " + VERSION + " is required")
 
@@ -110,11 +166,21 @@ def main():
             executable = binaries / executable_name
             godot(args.godot, "--headless", "--path", str(stage), "--export-release", preset, str(executable), env=env)
             artifacts.append(archive_distribution(kind, executable, work, work))
+            if kind == "windows":
+                portable_exe = work / executable_name
+                shutil.copy2(executable, portable_exe)
+                artifacts.append(portable_exe)
+            if kind == "linux" and args.deb:
+                artifacts.append(build_deb(work / "TinyOffice-Linux", work))
+                installer = work / "install-linux.sh"
+                shutil.copy2(PROJECT / installer.name, installer)
+                artifacts.append(installer)
         for artifact in artifacts:
             artifact.replace(output / artifact.name)
     published = sorted(
         path for path in output.iterdir()
-        if path.is_file() and any(path.name.endswith(ext) for _, _, ext in DISTRIBUTIONS.values())
+        if path.is_file() and (path.name.endswith((".tar.gz", ".zip", ".deb"))
+                               or path.name in ("TinyOffice.exe", "install-linux.sh"))
     )
     (output / "SHA256SUMS.txt").write_text("".join(
         f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in published

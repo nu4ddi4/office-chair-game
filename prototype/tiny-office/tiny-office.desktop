@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Tiny Office
+Name[ko]=책상 아래
+Exec=tiny-office
+Terminal=false
+Categories=Game;

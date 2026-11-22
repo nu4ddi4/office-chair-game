@@ -29,7 +29,21 @@ openssl rand -hex 18
 
 ## 친구 PC에서 접속
 
-Windows는 `TinyOffice-Windows.zip`에서 `TinyOffice.exe`, Linux는 `TinyOffice-Linux.tar.gz`에서 `./tiny-office`를 실행합니다. 두 사람 모두 같은 빌드를 사용합니다. 게임에서 서버의 공개 주소 또는 사설망 주소, UDP 포트와 방 키를 입력합니다.
+### Windows 64비트
+
+`TinyOffice-Windows.zip`을 모두 압축 해제하고 `install-windows.cmd`를 실행합니다. 관리자 권한 없이 현재 사용자에게 설치하며, 시작 메뉴에서 **Tiny Office**를 실행할 수 있습니다. 설치 없이 플레이하려면 `TinyOffice.exe`를 바로 실행합니다.
+
+### Debian 12 · Ubuntu 24.04 amd64
+
+`tiny-office_0.1.0_amd64.deb`와 `install-linux.sh`를 같은 폴더에 두고 실행합니다. 설치 스크립트가 APT로 필요한 패키지를 함께 설치합니다.
+
+```sh
+sh ./install-linux.sh
+```
+
+설치 후 앱 메뉴에서 **책상 아래**를 열거나 터미널에서 `tiny-office`를 실행합니다. 설치 없이 플레이하려면 `TinyOffice-Linux.tar.gz`를 풀고 `./tiny-office`를 실행합니다.
+
+두 사람 모두 같은 빌드를 사용합니다. 게임에서 호스트가 공유한 서버 주소, UDP 포트(기본값 `30820`)와 방 키를 입력합니다.
 
 - WASD로 이동하고 마우스로 봅니다. Space로 점프, E를 길게 눌러 잡기·고정·구출, V로 1·3인칭을 전환합니다. E를 놓으면 잡기를 풉니다.
 - 아래에서 한 명이 서랍을 열고 다른 사람이 발판에 올라 클립을 끼웁니다. 두 사람 모두 첫 책상에 올라가면 바인더를 서로 다른 손잡이에서 잡습니다.
@@ -46,3 +60,5 @@ python3 prototype/tiny-office/build.py --godot /path/to/godot
 ```
 
 `--target server`로 Linux 서버만 만들 수 있습니다. Linux에 풀어 놓은 공식 템플릿을 쓸 때는 `--templates /path/to/templates`를 지정합니다. 결과의 압축 파일과 체크섬은 `prototype/tiny-office/dist/`에 있습니다.
+
+Windows 클라이언트만 만들려면 `--target windows`, Debian 패키지를 포함한 Linux 클라이언트를 만들려면 `--target linux --deb`를 추가합니다. `--deb`에는 `dpkg-deb`가 필요합니다. 대상 옵션 없이 `--deb`만 추가하면 모든 플랫폼 결과와 Debian 패키지를 함께 만듭니다.
