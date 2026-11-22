@@ -9,135 +9,44 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: chair-test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+  group: tiny-office-test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: false
-      - name: Check release packaging
-        run: python3 -m unittest discover -s tests/release
-      - name: Fetch runtime offices
-        run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb,godot/assets/models/Office_Chaos.glb" --exclude=""
-      - name: Reuse the Godot import cache
-        uses: actions/cache@v4
-        with:
-          # Godot extracts the maps' embedded textures next to the GLBs, outside .godot;
-          # they must be cached together or a cache hit leaves the map unloadable.
-          path: |
-            godot/.godot
-            godot/assets/models/Office_Chaos_*
-            godot/assets/models/Interior_07_Godot_*
-          key: godot-import-v2-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**/*.glb', 'godot/assets/**/*.import', 'godot/assets/fonts/**', 'godot/assets/textures/**', 'godot/project.godot') }}
-      - uses: chickensoft-games/setup-godot@v2
-        with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: false
-      - name: Lint workflows
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
-      - name: Rules, saves, real physics and rendered review
-        run: xvfb-run -a -s "-screen 0 1600x900x24" python3 scripts/test-game.py --godot godot --rendered
-      - name: Retained source map regression
-        run: python3 scripts/test-map.py --godot godot
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: office-chair-review-${{ github.run_id }}
-          path: chaos-results/
-          if-no-files-found: ignore
-          retention-days: 14
-  # Packaging does not depend on the test results, so it runs alongside them.
-  # Release still requires the whole Test run (every job) to succeed.
-  windows:
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: false
-      - name: Fetch runtime offices for import
-        run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb,godot/assets/models/Office_Chaos.glb" --exclude=""
-      - name: Reuse the Godot import cache
-        uses: actions/cache@v4
-        with:
-          # Godot extracts the maps' embedded textures next to the GLBs, outside .godot;
-          # they must be cached together or a cache hit leaves the map unloadable.
-          path: |
-            godot/.godot
-            godot/assets/models/Office_Chaos_*
-            godot/assets/models/Interior_07_Godot_*
-          key: godot-import-v2-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**/*.glb', 'godot/assets/**/*.import', 'godot/assets/fonts/**', 'godot/assets/textures/**', 'godot/project.godot') }}
-      - uses: chickensoft-games/setup-godot@v2
-        with:
-          version: 4.7.2
-          use-dotnet: false
-          include-templates: true
-      - uses: ./.github/actions/inno-setup
-      - name: Locate console engine
-        shell: pwsh
-        run: |
-          $console = Join-Path $env:USERPROFILE 'godot/Godot_v4.7.2-stable_win64_console.exe'
-          if (-not (Test-Path $console)) {
-            $archive = Join-Path $env:RUNNER_TEMP 'godot.zip'
-            Invoke-WebRequest 'https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip' -OutFile $archive
-            Expand-Archive $archive (Join-Path $env:USERPROFILE 'godot') -Force
-          }
-          "CHAOS_GODOT=$console" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Import and verify portable EXE
-        shell: pwsh
-        run: |
-          & $env:CHAOS_GODOT --headless --path godot --editor --import --quit
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          python scripts/build-game.py --godot "$env:CHAOS_GODOT" --verify --installer
-      - name: Install, update, recover and uninstall
-        shell: powershell
-        run: ./tests/windows/installer-update.ps1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: OfficeChairChaos-Windows-x64
-          path: chaos-dist/
-          retention-days: 14
-  linux:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: false
-      - name: Fetch runtime offices for import
-        run: git lfs pull --include="godot/assets/models/Interior_07_Godot.glb,godot/assets/models/Office_Chaos.glb" --exclude=""
-      - name: Reuse the Godot import cache
-        uses: actions/cache@v4
-        with:
-          # Godot extracts the maps' embedded textures next to the GLBs, outside .godot;
-          # they must be cached together or a cache hit leaves the map unloadable.
-          path: |
-            godot/.godot
-            godot/assets/models/Office_Chaos_*
-            godot/assets/models/Interior_07_Godot_*
-          key: godot-import-v2-${{ runner.os }}-4.7.2-${{ hashFiles('godot/assets/**/*.glb', 'godot/assets/**/*.import', 'godot/assets/fonts/**', 'godot/assets/textures/**', 'godot/project.godot') }}
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.7.2
           use-dotnet: false
           include-templates: true
-      - name: Check Debian packaging tools
-        run: dpkg-deb --version
-      - name: Import, export and verify the Linux build
+      - name: Lint workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Build and verify checksums
         run: |
-          godot --headless --path godot --editor --import --quit
-          python3 scripts/build-linux.py --godot godot --verify --deb
-      - name: Install, run and purge the DEB on Debian 12
-        run: docker run --rm -v "$PWD:/repo:ro" debian:bookworm-slim bash /repo/tests/linux/debian-check.sh
-      - name: Install, run and purge the DEB on Ubuntu 24.04
-        run: docker run --rm -v "$PWD:/repo:ro" ubuntu:24.04 bash /repo/tests/linux/debian-check.sh
+          python3 prototype/tiny-office/build.py --godot godot --deb
+          cd prototype/tiny-office/dist
+          sha256sum -c SHA256SUMS.txt
+      - name: Verify server startup
+        shell: bash
+        working-directory: prototype/tiny-office/dist
+        run: |
+          tar -xzf TinyOffice-Linux-Server.tar.gz -C "$RUNNER_TEMP"
+          server="$RUNNER_TEMP/TinyOffice-Linux-Server"
+          config="$RUNNER_TEMP/tiny-office-test.cfg"
+          (
+            umask 077
+            printf '[server]\nbind_address="127.0.0.1"\nport=30820\nroom_key="%s"\n' "$(openssl rand -hex 18)" > "$config"
+          )
+          timeout 15 "$server/tiny-office-server" --headless --quit-after 120 -- --config "$config" | tee "$RUNNER_TEMP/server.log"
+          grep -q 'TINY_OFFICE_READY .*bind=127.0.0.1 udp=30820' "$RUNNER_TEMP/server.log"
       - uses: actions/upload-artifact@v4
         with:
-          name: OfficeChairChaos-Linux-x64
-          path: chaos-dist-linux/
+          name: TinyOffice-packages
+          path: prototype/tiny-office/dist/
+          if-no-files-found: error
           retention-days: 14

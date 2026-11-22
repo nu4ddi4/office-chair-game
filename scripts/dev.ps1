@@ -1,15 +1,3 @@
-<#
-Quick local runs for development on Windows (no export templates needed).
-
-  .\scripts\dev.ps1 play            Run the game straight from the source tree.
-  .\scripts\dev.ps1 build [-Run]    Build chaos-dev\OfficeChairChaos.exe + .pck and optionally start it.
-
-Godot 4.7.2 is taken from $env:CHAOS_GODOT, from PATH, or from .tools\godot in this
-repository. If none is found the script offers to download the official build from
-github.com/godotengine (about 82 MB) and checks its SHA-512 before using it.
-The dev build is the Godot runtime next to an exported game pack; Godot runs the
-.pck that shares its file name. Release builds still use scripts\build-game.py.
-#>
 param(
     [Parameter(Position = 0)][ValidateSet('play', 'build')][string]$Mode = 'play',
     [switch]$Run,
@@ -30,7 +18,7 @@ function Test-Godot([string]$Path) {
 }
 
 function Find-Godot {
-    if (Test-Godot $env:CHAOS_GODOT) { return $env:CHAOS_GODOT }
+    if (Test-Godot $env:TINY_OFFICE_GODOT) { return $env:TINY_OFFICE_GODOT }
     foreach ($name in @('godot', 'godot4')) {
         $command = Get-Command $name -ErrorAction SilentlyContinue
         if ($command -and (Test-Godot $command.Source)) { return $command.Source }
@@ -43,10 +31,10 @@ function Find-Godot {
 function Get-Godot {
     $found = Find-Godot
     if ($found) { return $found }
-    Write-Host "Godot $Version was not found (CHAOS_GODOT, PATH or .tools\godot)."
+    Write-Host "Godot $Version was not found (TINY_OFFICE_GODOT, PATH or .tools\godot)."
     if (-not $Yes) {
         $answer = Read-Host "Download $ZipName (about 82 MB) from github.com/godotengine into .tools\godot? [y/N]"
-        if ($answer -notmatch '^(y|yes)$') { throw 'Godot is required. Set CHAOS_GODOT to an existing Godot 4.7.2 executable.' }
+        if ($answer -notmatch '^(y|yes)$') { throw 'Godot is required. Set TINY_OFFICE_GODOT to an existing Godot 4.7.2 executable.' }
     }
     New-Item -ItemType Directory -Force $Tools | Out-Null
     $zip = Join-Path $Tools $ZipName
@@ -67,35 +55,23 @@ function Get-Godot {
     return $local
 }
 
-function Invoke-Import([string]$Godot) {
-    Write-Host 'Importing assets (fast when nothing changed)...'
-    $import = Start-Process -FilePath $Godot -ArgumentList @('--headless', '--path', "`"$(Join-Path $Root 'godot')`"", '--editor', '--import', '--quit') -NoNewWindow -Wait -PassThru
-    if ($import.ExitCode -ne 0) { throw "Godot import failed with exit code $($import.ExitCode)." }
-    $texture = Get-ChildItem (Join-Path $Root 'godot\assets\models') -Filter 'Office_Chaos_*' -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $texture) { Write-Warning 'The detailed office textures are missing. Run "git lfs pull" so the map GLBs are real files.' }
-}
-
 $godot = Get-Godot
-Invoke-Import $godot
+$project = Join-Path $Root 'prototype\tiny-office'
+$console = $godot -replace '\.exe$', '_console.exe'
+$headless = $godot
+if (Test-Path -LiteralPath $console) { $headless = $console }
 
 if ($Mode -eq 'play') {
-    Write-Host 'Starting the game from source...'
-    Start-Process -FilePath $godot -ArgumentList @('--path', "`"$(Join-Path $Root 'godot')`"")
+    $generated = Join-Path $project 'generated'
+    New-Item -ItemType Directory -Force $generated | Out-Null
+    Copy-Item -LiteralPath (Join-Path $Root 'godot\assets\fonts\NotoSansKR.ttf') -Destination $generated -Force
+    & $headless --headless --path $project --editor --import --quit
+    if ($LASTEXITCODE -ne 0) { throw "Godot import failed with exit code $LASTEXITCODE." }
+    Start-Process -FilePath $godot -ArgumentList @('--path', "`"$project`"")
     return
 }
 
-$dist = Join-Path $Root 'chaos-dev'
-New-Item -ItemType Directory -Force $dist | Out-Null
-$pack = Join-Path $dist 'OfficeChairChaos.pck'
-Write-Host 'Exporting the game pack...'
-$export = Start-Process -FilePath $godot -ArgumentList @('--headless', '--path', "`"$(Join-Path $Root 'godot')`"", '--export-pack', '"Windows Desktop"', "`"$pack`"") -NoNewWindow -Wait -PassThru
-if ($export.ExitCode -ne 0 -or -not (Test-Path $pack)) { throw "Exporting the game pack failed (exit code $($export.ExitCode))." }
-# The Godot runtime loads the .pck that shares its name; the console twin shows logs.
-Copy-Item $godot (Join-Path $dist 'OfficeChairChaos.exe') -Force
-$console = $godot -replace '\.exe$', '_console.exe'
-if (Test-Path $console) {
-    Copy-Item $console (Join-Path $dist 'OfficeChairChaos.console.exe') -Force
-}
-$size = [math]::Round((Get-Item $pack).Length / 1MB)
-Write-Host "Dev build ready: $dist\OfficeChairChaos.exe (pack $size MB)"
-if ($Run) { Start-Process -FilePath (Join-Path $dist 'OfficeChairChaos.exe') -WorkingDirectory $dist }
+& python (Join-Path $project 'build.py') --godot $headless --target windows
+if ($LASTEXITCODE -ne 0) { throw "Client build failed with exit code $LASTEXITCODE." }
+$dist = Join-Path $project 'dist'
+if ($Run) { Start-Process -FilePath (Join-Path $dist 'TinyOffice.exe') -WorkingDirectory $dist }

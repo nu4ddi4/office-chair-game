@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.nu4ddi4.TinyOffice</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Tiny Office</name>
+  <name xml:lang="ko">책상 아래</name>
+  <summary>Escape an office together as two tiny people</summary>
+  <summary xml:lang="ko">작아진 두 사람이 함께 사무실을 탈출하는 협동 게임</summary>
+  <description>
+    <p>Work together to climb desks, operate improvised mechanisms and find a way out of the office.</p>
+    <p xml:lang="ko">두 사람이 손을 맞춰 책상을 오르고 주변 물건을 움직이며 사무실에서 빠져나갈 길을 찾으세요.</p>
+  </description>
+  <launchable type="desktop-id">tiny-office.desktop</launchable>
+  <categories>
+    <category>Game</category>
+  </categories>
+  <url type="homepage">https://github.com/nu4ddi4/office-chair-game</url>
+  <developer id="com.github.nu4ddi4">
+    <name>Office Chair Game contributors</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+</component>

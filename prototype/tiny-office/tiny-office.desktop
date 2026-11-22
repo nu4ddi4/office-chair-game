@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Tiny Office
+Name[ko]=책상 아래
+Comment=Escape an office together as two tiny people
+Comment[ko]=작아진 두 사람이 함께 사무실을 탈출하는 협동 게임
+Exec=tiny-office
+Icon=tiny-office
+Terminal=false
+Categories=Game;
