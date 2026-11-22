@@ -4,11 +4,15 @@ const Office = preload("res://office.gd")
 const Runner = preload("res://runner.gd")
 const Run = preload("res://run.gd")
 const View = preload("res://view.gd")
-const PROTOCOL = "tiny-office-1"
+const PROTOCOL = "tiny-office-2"
 const DEFAULT_PORT = 30820
 const INPUT_CHANNEL = 1
 const STATE_CHANNEL = 2
 const MAX_BUFFER = 48
+const SHIFT_ROUNDS = 3
+const INTERMISSION_SECONDS = 5.0
+
+enum Phase { LOBBY, PLAYING, ROUND_RESULT, SHIFT_RESULT }
 
 var server_mode = false
 var office: Node3D
@@ -16,6 +20,12 @@ var view: CanvasLayer
 var run
 var runners: Array = []
 var peer_ids: Array[int] = []
+var seats := [0, 0]
+var phase := Phase.LOBBY
+var shift_round := 0
+var shift_elapsed := 0.0
+var completed_tasks := 0
+var intermission := 0.0
 var room_key = ""
 var auth_nonces: Dictionary = {}
 var crypto = Crypto.new()
@@ -36,6 +46,7 @@ var camera_pitch = -0.12
 var first_person = false
 var remote_position = Vector3.ZERO
 var remote_direction = Vector2.ZERO
+var remote_visible := false
 var suppress_input = false
 
 func _ready() -> void:
@@ -55,7 +66,7 @@ func _ready() -> void:
 	view.configure(self)
 	multiplayer.connected_to_server.connect(func():
 		if not current_round:
-			view.show_wait("연결되었습니다. 다른 참가자를 기다립니다.")
+			view.show_wait("방 정보를 받는 중입니다.")
 	)
 	multiplayer.connection_failed.connect(_connection_lost.bind("서버에 접속하지 못했습니다. 주소와 방 키를 확인해 주세요."))
 	multiplayer.server_disconnected.connect(_connection_lost.bind("서버 연결이 끝났습니다."))
@@ -169,22 +180,35 @@ func _peer_joined(id: int) -> void:
 		return
 	peer_ids.append(id)
 	print("TINY_OFFICE_JOIN players=%d" % peer_ids.size())
-	if peer_ids.size() == 2:
-		_start_server_round()
-	else:
-		waiting.rpc_id(id)
+	_send_room_status()
 
 func _peer_left(id: int) -> void:
 	if not server_mode:
 		return
 	peer_ids.erase(id)
-	current_round = false
-	run = null
-	_clear_runners()
-	office.set_puzzles(0, 0)
+	var seat := seats.find(id)
+	if seat >= 0:
+		run.release_player(seat)
+		seats[seat] = 0
 	print("TINY_OFFICE_LEAVE players=%d" % peer_ids.size())
-	for remaining_id in peer_ids:
-		waiting.rpc_id(remaining_id)
+	if peer_ids.is_empty() or (phase == Phase.PLAYING and seats == [0, 0]):
+		phase = Phase.LOBBY
+		_clear_runners()
+		run = null
+		seats = [0, 0]
+	_send_room_status()
+
+func _send_room_status() -> void:
+	for id in peer_ids:
+		if phase == Phase.LOBBY:
+			room_status.rpc_id(id, round_id, peer_ids.size(), false)
+		elif phase == Phase.SHIFT_RESULT:
+			show_result.rpc_id(id, round_id, shift_round, true, int(shift_elapsed), completed_tasks)
+		elif id not in seats:
+			if phase == Phase.ROUND_RESULT:
+				show_result.rpc_id(id, round_id, shift_round, false, int(shift_elapsed), completed_tasks)
+			else:
+				room_status.rpc_id(id, round_id, peer_ids.size(), true)
 
 func leave_room() -> void:
 	_connection_lost("연결을 종료했습니다.")
@@ -203,20 +227,35 @@ func _connection_lost(message: String) -> void:
 	_clear_runners()
 	view.show_connect(message)
 
+@rpc("any_peer", "call_remote", "reliable")
+func request_shift(generation: int) -> void:
+	if not server_mode or generation != round_id or phase not in [Phase.LOBBY, Phase.SHIFT_RESULT]:
+		return
+	if multiplayer.get_remote_sender_id() not in peer_ids:
+		return
+	shift_round = 0
+	shift_elapsed = 0.0
+	completed_tasks = 0
+	_start_server_round()
+
 func _start_server_round() -> void:
+	shift_round += 1
 	round_id += 1
 	server_frame = 0
 	longest_step_usec = 0
-	current_round = true
+	phase = Phase.PLAYING
+	seats = [0, 0]
 	incoming = [{}, {}]
 	input_age = [0.0, 0.0]
+	for i in range(peer_ids.size()):
+		seats[i] = peer_ids[i]
 	_spawn_runners(false)
 	run = Run.new()
 	run.office = office
 	run.players = runners
-	run.reset(0)
-	for i in range(2):
-		begin_round.rpc_id(peer_ids[i], round_id, i)
+	run.reset(shift_round)
+	for i in range(peer_ids.size()):
+		begin_round.rpc_id(seats[i], round_id, shift_round, i, peer_ids.size())
 
 func _spawn_runners(graphics: bool) -> void:
 	_clear_runners()
@@ -224,8 +263,11 @@ func _spawn_runners(graphics: bool) -> void:
 		var runner = Runner.new()
 		add_child(runner)
 		runner.configure(i, graphics)
-		runner.position = Office.START + Vector3(0, 0, -0.08 + i * 0.16)
+		runner.position = _spawn_point(i)
 		runners.append(runner)
+
+func _spawn_point(seat: int) -> Vector3:
+	return Office.START + Vector3(-0.08 + seat * 0.16, 0, 0)
 
 func _clear_runners() -> void:
 	for runner in runners:
@@ -237,51 +279,66 @@ func _clear_runners() -> void:
 	history.clear()
 
 @rpc("authority", "call_remote", "reliable")
-func waiting() -> void:
+func room_status(generation: int, participants: int, late: bool) -> void:
+	round_id = generation
 	current_round = false
 	_clear_runners()
-	view.show_wait("두 사람이 접속하면 처음부터 시작합니다.")
+	view.show_lobby(participants, late)
 
 @rpc("authority", "call_remote", "reliable")
-func begin_round(id: int, assignment: int) -> void:
+func begin_round(id: int, number: int, assignment: int, participants: int) -> void:
 	round_id = id
+	shift_round = number
 	slot = assignment
 	seq = 0
 	jump_count = 0
 	suppress_input = false
-	camera_yaw = -PI / 2
-	camera_pitch = -0.12
+	camera_yaw = 0.0
+	camera_pitch = -0.18
 	_spawn_runners(true)
-	office.set_puzzles(0, 0)
+	for i in range(office.props.size()):
+		office.props[i].transform = Transform3D(Basis.IDENTITY, Office.SPAWNS[(number - 1) % Office.SPAWNS.size()][i])
 	remote_position = runners[1 - slot].position
 	remote_direction = Vector2.ZERO
+	remote_visible = participants == 2
 	current_round = true
 	view.show_play()
+	view.update_round(shift_round, [false, false], -1, 0, first_person)
 	view.reset_camera(runners[slot].position)
 
+@rpc("authority", "call_remote", "reliable")
+func show_result(id: int, number: int, final: bool, seconds: int, total: int) -> void:
+	round_id = id
+	current_round = false
+	_clear_runners()
+	view.show_result(number, final, seconds, total)
+
 @rpc("any_peer", "call_remote", "reliable")
-func play_again(requested_round: int) -> void:
-	if server_mode and current_round and requested_round == round_id and run.done and multiplayer.get_remote_sender_id() in peer_ids:
-		_start_server_round()
+func interact(id: int, throwing: bool, aim: Vector3) -> void:
+	if not server_mode or phase != Phase.PLAYING or id != round_id or not aim.is_finite():
+		return
+	var seat := seats.find(multiplayer.get_remote_sender_id())
+	if seat >= 0:
+		run.interact(seat, throwing, aim.limit_length())
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", INPUT_CHANNEL)
 func inputs(id: int, commands: Array) -> void:
-	if not server_mode or not current_round or id != round_id or commands.size() > 4:
+	if not server_mode or phase != Phase.PLAYING or id != round_id or commands.size() > 4:
 		return
-	var who = peer_ids.find(multiplayer.get_remote_sender_id())
+	var who := seats.find(multiplayer.get_remote_sender_id())
 	if who < 0:
 		return
 	var ack: int = runners[who].step_id
 	for command in commands:
-		if typeof(command) != TYPE_ARRAY or command.size() != 4:
+		if typeof(command) != TYPE_ARRAY or command.size() != 3:
 			continue
-		if typeof(command[0]) != TYPE_INT or typeof(command[1]) != TYPE_VECTOR2 or typeof(command[2]) != TYPE_INT or typeof(command[3]) != TYPE_BOOL:
+		if typeof(command[0]) != TYPE_INT or typeof(command[1]) != TYPE_VECTOR2 or typeof(command[2]) != TYPE_INT:
 			continue
-		if command[0] <= ack or (ack > 0 and command[0] > ack + 180) or not command[1].is_finite():
+		if command[0] <= ack or command[0] > ack + 180 or not command[1].is_finite():
 			continue
 		if command[2] < 0 or command[2] > command[0] or incoming[who].size() >= MAX_BUFFER:
 			continue
-		incoming[who][command[0]] = [command[0], command[1].limit_length(), command[2], command[3]]
+		incoming[who][command[0]] = [command[0], command[1].limit_length(), command[2]]
 
 @rpc("authority", "call_remote", "unreliable_ordered", STATE_CHANNEL)
 func state(id: int, bodies: Array, shared: Array) -> void:
@@ -289,18 +346,24 @@ func state(id: int, bodies: Array, shared: Array) -> void:
 		received = [bodies, shared]
 
 func _physics_process(delta: float) -> void:
-	if not current_round:
-		return
 	if server_mode:
-		_server_step(delta)
-	else:
+		if phase == Phase.PLAYING:
+			_server_step(delta)
+		elif phase == Phase.ROUND_RESULT:
+			intermission -= delta
+			if intermission <= 0.0:
+				_start_server_round()
+	elif current_round:
 		_client_step(delta)
 
 func _server_step(delta: float) -> void:
 	var started_usec = Time.get_ticks_usec()
-	for i in range(2):
+	shift_elapsed += delta
+	for i in range(seats.size()):
+		if seats[i] == 0:
+			continue
 		var actor = runners[i]
-		var jump_now = false
+		var jump_now := false
 		var queued: Dictionary = incoming[i]
 		if not queued.is_empty():
 			var sequence: int = queued.keys().min()
@@ -310,50 +373,64 @@ func _server_step(delta: float) -> void:
 			actor.direction = command[1]
 			jump_now = command[2] > actor.jumps
 			actor.jumps = maxi(actor.jumps, command[2])
-			actor.held = command[3]
 			input_age[i] = 0.0
 		else:
 			input_age[i] += delta
 			if input_age[i] > 0.15:
 				actor.direction = Vector2.ZERO
-				actor.held = false
-		if run.captives[i] == Run.FREE and not run.done:
-			actor.move_input(actor.direction, jump_now, delta, actor.held)
+		actor.move_input(actor.direction, jump_now, delta, run.holders.has(i))
+		if actor.position.y < Run.DROP_HEIGHT:
+			run.release_player(i)
+			actor.position = _spawn_point(i)
+			actor.velocity = Vector3.ZERO
+			actor.grounded = false
 	run.tick(delta)
+	if not run.complete.has(false):
+		_finish_round()
+		return
 	server_frame += 1
 	if server_frame % 3 == 0:
-		var bodies = []
+		var bodies := []
 		for actor in runners:
 			bodies.append([actor.position, actor.velocity, actor.direction, actor.grounded, actor.step_id, actor.jumps])
 		var shared: Array = run.snapshot()
-		for id in peer_ids:
-			state.rpc_id(id, round_id, bodies, shared)
+		shared.append(seats.map(func(id): return id != 0))
+		shared.append(int(shift_elapsed))
+		for id in seats:
+			if id != 0:
+				state.rpc_id(id, round_id, bodies, shared)
 	longest_step_usec = maxi(longest_step_usec, Time.get_ticks_usec() - started_usec)
 	if server_frame % 600 == 0:
 		print("TINY_OFFICE_TICK max_ms=%.2f budget_ms=16.67" % (longest_step_usec / 1000.0))
 		longest_step_usec = 0
 
+func _finish_round() -> void:
+	completed_tasks += run.complete.size()
+	var final := shift_round == SHIFT_ROUNDS
+	phase = Phase.SHIFT_RESULT if final else Phase.ROUND_RESULT
+	intermission = INTERMISSION_SECONDS
+	print("TINY_OFFICE_ROUND round=%d total_tasks=%d" % [shift_round, completed_tasks])
+	for id in peer_ids:
+		show_result.rpc_id(id, round_id, shift_round, final, int(shift_elapsed), completed_tasks)
+
 func _client_step(delta: float) -> void:
 	if not received.is_empty():
 		_apply_state(delta)
 	seq += 1
-	var axis = Vector2.ZERO
-	var grip = false
+	var axis := Vector2.ZERO
 	if not suppress_input and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		var raw = Input.get_vector("left", "right", "forward", "back")
-		var move = Basis(Vector3.UP, camera_yaw) * Vector3(raw.x, 0, raw.y)
+		var raw := Input.get_vector("left", "right", "forward", "back")
+		var move := Basis(Vector3.UP, camera_yaw) * Vector3(raw.x, 0, raw.y)
 		axis = Vector2(move.x, move.z)
-		grip = Input.is_action_pressed("grip")
 		if Input.is_action_just_pressed("camera"):
 			first_person = not first_person
 		if Input.is_action_just_pressed("jump"):
 			jump_count += 1
 	var actor = runners[slot]
-	if _can_move():
-		actor.move_input(axis, jump_count > actor.jumps, delta, grip)
+	actor.move_input(axis, jump_count > actor.jumps, delta, _held_prop() >= 0)
 	actor.jumps = jump_count
-	actor.direction = axis if _can_move() else Vector2.ZERO
-	history.append([seq, axis, jump_count, grip])
+	actor.direction = axis
+	history.append([seq, axis, jump_count])
 	if history.size() > MAX_BUFFER:
 		history.pop_front()
 	inputs.rpc_id(1, round_id, history.slice(maxi(0, history.size() - 4)))
@@ -362,11 +439,11 @@ func _apply_state(delta: float) -> void:
 	var bodies: Array = received[0]
 	latest_state = received[1]
 	received.clear()
-	office.set_puzzles(latest_state[5], latest_state[6])
 	var own: Array = bodies[slot]
 	var remote: Array = bodies[1 - slot]
 	remote_position = remote[0]
-	remote_direction = remote[2] if latest_state[2][1 - slot] == Run.FREE else Vector2.ZERO
+	remote_direction = remote[2]
+	remote_visible = latest_state[3][1 - slot]
 	while not history.is_empty() and history[0][0] <= own[4]:
 		history.pop_front()
 	var actor = runners[slot]
@@ -374,13 +451,12 @@ func _apply_state(delta: float) -> void:
 	actor.velocity = own[1]
 	actor.grounded = own[3]
 	actor.jumps = own[5]
-	if _can_move():
-		for command in history:
-			actor.move_input(command[1], command[2] > actor.jumps, delta, command[3])
-			actor.jumps = command[2]
+	for command in history:
+		actor.move_input(command[1], command[2] > actor.jumps, delta, _held_prop() >= 0)
+		actor.jumps = command[2]
 
-func _can_move() -> bool:
-	return latest_state.is_empty() or (latest_state[2][slot] == Run.FREE and not latest_state[7])
+func _held_prop() -> int:
+	return -1 if latest_state.is_empty() else latest_state[2].find(slot)
 
 func _process(delta: float) -> void:
 	if server_mode or not current_round:
@@ -392,27 +468,33 @@ func _process(delta: float) -> void:
 	else:
 		remote.position = remote.position.lerp(remote_position, 1.0 - exp(-delta * 19.0))
 	actor.animate_runner(actor.direction, delta, not first_person)
-	remote.animate_runner(remote_direction, delta, true)
+	remote.animate_runner(remote_direction, delta, remote_visible)
 	view.follow(actor.position, camera_yaw, camera_pitch, first_person, delta)
 	if latest_state.is_empty():
 		return
-	var target = latest_state[13]
-	var attention = clampf((latest_state[14] - Run.WATCH_TIME) / Run.GRAB_TIME, 0.0, 1.0)
-	office.show_staff(latest_state[11], latest_state[12], attention, latest_state[15])
-	view.employee_audio(latest_state[11])
-	for i in range(2):
-		office.show_cup(i, runners[i].position, latest_state[2][i] == Run.CAUGHT)
-	office.show_markers(latest_state[3], latest_state[4], latest_state[0], latest_state[8][slot])
-	view.update_round(latest_state, slot, target, first_person)
+	for i in range(office.props.size()):
+		var prop: Node3D = office.props[i]
+		var target: Transform3D = latest_state[1][i]
+		if prop.position.distance_to(target.origin) > 0.34:
+			prop.transform = target
+		else:
+			prop.transform = prop.transform.interpolate_with(target, 1.0 - exp(-delta * 22.0))
+	view.update_round(shift_round, latest_state[0], _held_prop(), latest_state[4], first_person)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if server_mode or not current_round:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
-		if not latest_state.is_empty() and latest_state[7]:
-			return
 		suppress_input = not suppress_input
 		view.show_pause(suppress_input)
-	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		return
+	if suppress_input or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return
+	if event is InputEventMouseMotion:
 		camera_yaw -= event.relative.x * 0.003
 		camera_pitch = clampf(camera_pitch - event.relative.y * 0.003, -1.23, 0.95)
+	elif event.is_action_pressed("grip"):
+		interact.rpc_id(1, round_id, false, Vector3.ZERO)
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var aim := Basis.from_euler(Vector3(camera_pitch, camera_yaw, 0), EULER_ORDER_YXZ) * Vector3.FORWARD
+		interact.rpc_id(1, round_id, true, aim)
