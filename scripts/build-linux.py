@@ -54,6 +54,8 @@ def build_deb(binary, licenses, destination, version):
         files = [(binary, f'opt/{NAME}/{BINARY}', 0o755),
                  (licenses, f'usr/share/doc/{NAME}/copyright', 0o644),
                  (PACKAGING / (NAME+'.desktop'), f'usr/share/applications/{NAME}.desktop', 0o644),
+                 (PACKAGING / 'com.github.nu4ddi4.OfficeChairChaos.metainfo.xml',
+                  'usr/share/metainfo/com.github.nu4ddi4.OfficeChairChaos.metainfo.xml', 0o644),
                  (PACKAGING / (NAME+'.png'), f'usr/share/icons/hicolor/256x256/apps/{NAME}.png', 0o644)]
         for source, relative, mode in files:
             target = staging / relative

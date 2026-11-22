@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.nu4ddi4.OfficeChairChaos</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Office Chair Chaos</name>
+  <name xml:lang="ko">김 대리, 나 좀 밀어봐</name>
+  <summary>Push your boss through the office in a physics comedy</summary>
+  <summary xml:lang="ko">부장님을 의자에 태워 사무실을 누비는 물리 코미디 게임</summary>
+  <description>
+    <p>Guide a wobbly employee through office obstacles while pushing your boss in a rolling chair.</p>
+    <p xml:lang="ko">휘청이는 직원을 조작해 바퀴 달린 의자로 부장님을 모시며 사무실 곳곳의 장애물을 통과하세요.</p>
+  </description>
+  <launchable type="desktop-id">office-chair-chaos.desktop</launchable>
+  <categories>
+    <category>Game</category>
+    <category>ActionGame</category>
+  </categories>
+  <url type="homepage">https://github.com/nu4ddi4/office-chair-game</url>
+  <developer id="com.github.nu4ddi4">
+    <name>Office Chair Game contributors</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+</component>

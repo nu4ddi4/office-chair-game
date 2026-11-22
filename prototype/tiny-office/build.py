@@ -91,6 +91,9 @@ def build_deb(bundle, work):
         (bundle / "LICENSES.txt", "usr/share/doc/tiny-office/copyright", 0o644),
         (bundle / "README.md", "usr/share/doc/tiny-office/README.md", 0o644),
         (PROJECT / "tiny-office.desktop", "usr/share/applications/tiny-office.desktop", 0o644),
+        (PROJECT / "tiny-office.png", "usr/share/icons/hicolor/256x256/apps/tiny-office.png", 0o644),
+        (PROJECT / "com.github.nu4ddi4.TinyOffice.metainfo.xml",
+         "usr/share/metainfo/com.github.nu4ddi4.TinyOffice.metainfo.xml", 0o644),
     )
     installed_size = 0
     for source, relative_path, mode in files:
