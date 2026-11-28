@@ -26,6 +26,8 @@ jobs:
           include-templates: true
       - name: Lint workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Verify solo and co-op shifts
+        run: python3 prototype/tiny-office/tests/test_shift.py --godot godot
       - name: Build and verify checksums
         run: |
           python3 prototype/tiny-office/build.py --godot godot --deb

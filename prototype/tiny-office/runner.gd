@@ -7,7 +7,6 @@ const HEIGHT = 0.12
 
 var direction = Vector2.ZERO
 var jumps = 0
-var held = false
 var step_id = 0
 var body_visual: Node3D
 var leg_left: Node3D

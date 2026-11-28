@@ -20,13 +20,10 @@ var clock_label: Label
 var objective: Label
 var current_help: Label
 var feedback: Label
-var danger: ProgressBar
 var address = "127.0.0.1"
 var port = "30820"
 var room = ""
 var screen = ""
-var footstep: AudioStreamPlayer3D
-var last_step = Vector3.ZERO
 
 func configure(owner_node: Node3D) -> void:
 	session = owner_node
@@ -35,14 +32,8 @@ func configure(owner_node: Node3D) -> void:
 	camera.far = 30
 	camera.fov = 74
 	session.add_child(camera)
-	camera.position = Vector3(-6.6, 1.12, 2.82)
-	camera.look_at(Vector3(-1.6, 0.52, 0.15))
-	footstep = AudioStreamPlayer3D.new()
-	footstep.stream = _step_sound()
-	footstep.unit_size = 1.3
-	footstep.max_distance = 6.5
-	footstep.max_polyphony = 3
-	session.add_child(footstep)
+	camera.position = Vector3(-1.25, 1.72, 1.65)
+	camera.look_at(Vector3(0, 0.80, 0))
 	root = Control.new()
 	add_child(root)
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -138,8 +129,8 @@ func show_connect(message: String) -> void:
 	screen = "connect"
 	_clear_form()
 	hud.hide()
-	_label(form, "책상 아래", 50)
-	_label(form, "두 사람이 함께 사무실을 빠져나오세요.", 17, MUTED)
+	_label(form, "SMALL BUSINESS", 39)
+	_label(form, "작은 직원들의 세 판짜리 근무조입니다.", 17, MUTED)
 	var row = HBoxContainer.new()
 	form.add_child(row)
 	var host_input = _field(row, "서버 주소", address, 253)
@@ -154,7 +145,7 @@ func show_connect(message: String) -> void:
 		port = port_input.text.strip_edges()
 		room = key_input.text
 		session.connect_room(address, int(port) if port.is_valid_int() else 0, room)
-	_button(form, "친구 방 입장", join)
+	_button(form, "방 입장", join)
 	key_input.text_submitted.connect(func(_value): join.call())
 	host_input.grab_focus()
 
@@ -162,9 +153,34 @@ func show_wait(message: String) -> void:
 	screen = "wait"
 	_clear_form()
 	hud.hide()
-	_label(form, "친구를 기다리는 중", 33)
+	_label(form, "서버에 연결 중", 33)
 	_label(form, message, 16, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_button(form, "연결 취소", session.leave_room)
+
+func show_lobby(participants: int, late: bool) -> void:
+	screen = "waiting_round" if late else "lobby"
+	_clear_form()
+	hud.hide()
+	_label(form, "근무 대기실", 36)
+	_label(form, "참가자 %d/2" % participants, 17, MUTED)
+	if late:
+		_label(form, "현재 진행 중인 판이 끝나면 합류합니다.", 16, MUTED)
+	else:
+		_label(form, "혼자 시작하거나 동료를 기다릴 수 있습니다.", 16, MUTED)
+		_button(form, "근무 시작", func(): session.request_shift.rpc_id(1, session.round_id))
+	_button(form, "방 나가기", session.leave_room)
+
+func show_result(number: int, final: bool, seconds: int, total: int) -> void:
+	screen = "shift_result" if final else "round_result"
+	_clear_form()
+	hud.hide()
+	_label(form, "퇴근" if final else "근무 %d/3 완료" % number, 39)
+	_label(form, "완료한 업무 %d개 · 근무 시간 %s" % [total, _time(seconds)], 17, MUTED)
+	if final:
+		_button(form, "새 근무조 시작", func(): session.request_shift.rpc_id(1, session.round_id))
+	else:
+		_label(form, "잠시 후 다음 판을 시작합니다.", 16, MUTED)
+	_button(form, "방 나가기", session.leave_room)
 
 func show_play() -> void:
 	screen = "play"
@@ -179,7 +195,7 @@ func show_pause(pause: bool) -> void:
 	screen = "pause"
 	_clear_form()
 	_label(form, "조작 일시 중지", 33)
-	_label(form, "친구와 직원은 계속 움직입니다.", 16, MUTED)
+	_label(form, "근무는 계속 진행됩니다.", 16, MUTED)
 	_button(form, "돌아가기", func(): session.suppress_input = false; show_play())
 	_button(form, "방 나가기", session.leave_room)
 
@@ -216,53 +232,19 @@ func _build_hud() -> void:
 	bottom.add_child(hints)
 	current_help = _label(hints, "", 18, LIGHT_TEXT)
 	feedback = _label(hints, "", 13, Color("#abd9cb"))
-	danger = ProgressBar.new()
-	hints.add_child(danger)
-	danger.max_value = 1
-	danger.show_percentage = false
-	danger.custom_minimum_size.y = 5
-	danger.add_theme_stylebox_override("background", _box(Color("#584337"), 0, 3))
-	danger.add_theme_stylebox_override("fill", _box(Color("#ffc284"), 0, 3))
-	danger.hide()
 
-func update_round(shared: Array, slot: int, target: int, first_person: bool) -> void:
-	var section: int = shared[0]
-	var seconds: int = int(shared[1])
-	var time = "%02d:%02d" % [seconds / 60, seconds % 60]
-	stage_label.text = ["바닥 · 1/3", "책상 위 · 2/3", "탈출구 · 3/3"][section]
-	clock_label.text = time
-	objective.text = ["둘이 첫 책상에 올라가기", "바인더를 놓고 함께 건너기", "둘이 배선 구멍까지 가기"][section]
-	var help = [
-		"E 길게 · 서랍 열어 두기", "E 길게 · 서랍에 클립 끼우기",
-		"E 길게 · 바인더 한쪽 잡기", "E 길게 · 바인더 반대쪽 잡기",
-		"E 길게 · 케이블 타고 내려가기", "E 길게 · 케이블 타고 올라가기",
-		"", "E 길게 · 컵 들어 올리기",
-	]
-	var action: int = shared[8][slot]
-	current_help.text = help[action] if action >= 0 else ["노란 표식에서 친구와 역할을 나누세요.", "친구와 서로 다른 바인더 손잡이를 잡으세요.", "노란 케이블을 타고 내려가세요."][section]
+func _time(seconds: int) -> String:
+	return "%02d:%02d" % [floori(seconds / 60.0), seconds % 60]
+
+func update_round(number: int, complete: Array, holding: int, seconds: int, first_person: bool) -> void:
+	stage_label.text = "근무 %d/3" % number
+	clock_label.text = _time(seconds)
+	objective.text = "%s  USB 연결\n%s  서류 운반" % ["완료" if complete[0] else "□", "완료" if complete[1] else "□"]
+	if holding >= 0:
+		current_help.text = ("USB" if holding == 0 else "서류") + " · E 놓기 / 왼쪽 클릭 던지기"
+	else:
+		current_help.text = "E 가까운 물건 잡기 · 같은 색 표식으로 운반"
 	feedback.text = "WASD 이동    Space 점프    V %s 전환    Esc 메뉴" % ("3인칭" if first_person else "1인칭")
-	danger.visible = false
-	if shared[2][slot] == 1:
-		current_help.text = "컵에 갇혔습니다. 친구가 구해 줄 수 있습니다."
-		if shared[10] > 0:
-			current_help.text = "둘 다 잡혔습니다. 직전 구간을 다시 시작합니다."
-	elif shared[2][1 - slot] == 1 and action != 7:
-		current_help.text = "친구가 잡혔습니다. 투명 컵으로 가세요."
-	elif target == slot:
-		current_help.text = "직원이 보고 있습니다. 가구 뒤로 숨으세요!"
-		danger.visible = true
-		danger.value = shared[14] / 1.4
-	if shared[9] > 0:
-		danger.visible = true
-		danger.value = shared[9] / 1.5
-	if shared[7] and screen != "finished":
-		screen = "finished"
-		_clear_form()
-		hud.hide()
-		_label(form, "둘 다 탈출했습니다", 36)
-		_label(form, "걸린 시간  " + time, 18, MUTED)
-		_button(form, "같이 다시 하기", func(): session.play_again.rpc_id(1, session.round_id))
-		_button(form, "방 나가기", session.leave_room)
 
 func reset_camera(at: Vector3) -> void:
 	camera_anchor = at + Vector3.UP * 0.108
@@ -278,29 +260,3 @@ func follow(at: Vector3, yaw: float, pitch: float, first_person: bool, delta: fl
 		if not obstruction.is_empty():
 			proposed = obstruction.position.move_toward(head, 0.03)
 	camera.global_transform = Transform3D(orientation, proposed)
-
-func employee_audio(at: Vector3) -> void:
-	if last_step.distance_to(at) < 0.43:
-		return
-	if last_step.distance_to(at) < 1.4:
-		footstep.position = at
-		footstep.play()
-	last_step = at
-
-func _step_sound() -> AudioStreamWAV:
-	var sample_rate = 16000
-	var count = 2560
-	var wave = PackedByteArray()
-	wave.resize(count * 2)
-	var rng = RandomNumberGenerator.new()
-	rng.seed = 664
-	for i in range(count):
-		var t = float(i) / sample_rate
-		var envelope = sin(minf(t / 0.015, 1.0) * PI / 2.0) * exp(-t * 31.0)
-		var body = sin(TAU * (52 * t - 42 * t * t)) * 0.56 + rng.randf_range(-0.16, 0.16)
-		wave.encode_s16(i * 2, int(body * envelope * 27000))
-	var stream = AudioStreamWAV.new()
-	stream.format = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate = sample_rate
-	stream.data = wave
-	return stream

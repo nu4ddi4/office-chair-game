@@ -1,9 +1,9 @@
-# 책상 아래
+# SMALL BUSINESS
 
-12cm가 된 두 사람이 사무실을 빠져나오는 PC용 2인 온라인 협동 게임입니다. 한 사람이 전용 서버를 열고, 두 참가자가 같은 클라이언트 빌드로 접속합니다.
+작아진 직원들이 거대한 사무실에서 업무를 처리하는 PC용 1~2인 온라인 협동 프로토타입입니다. 한 판에서 주어진 업무를 모두 끝내면 같은 방에서 다음 판이 열리고, 세 판을 마치면 퇴근합니다. 전용 서버에 참가자와 같은 빌드의 클라이언트로 접속합니다.
 
 - **Windows amd64** — `TinyOffice-Windows.zip`을 압축 해제하고 `install-windows.cmd`로 설치하거나 `TinyOffice.exe`를 실행합니다.
-- **Debian 12 · Ubuntu 24.04 amd64** — `tiny-office_0.1.0_amd64.deb`를 APT로 설치합니다. `install-linux.sh`를 같은 폴더에 두고 실행해도 됩니다.
+- **Debian 12 · Ubuntu 24.04 amd64** — `tiny-office_0.2.0_amd64.deb`를 APT로 설치합니다. `install-linux.sh`를 같은 폴더에 두고 실행해도 됩니다.
 - **전용 서버** — Linux amd64의 `TinyOffice-Linux-Server.tar.gz`를 사용합니다. 기본 게임 포트는 UDP 30820입니다.
 
 [설치, 서버 설정 및 플레이 방법](prototype/tiny-office/README.md)
