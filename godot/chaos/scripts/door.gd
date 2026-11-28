@@ -50,6 +50,16 @@ func hold_handle():
 func release_handle():
 	gripping_hands = maxi(0,gripping_hands-1)
 
+# The auto-closer is the hinge's own motor. A torque pushed into the leaf with
+# apply_torque() is absorbed by the joint's solver and never moves it, and the leaf
+# rests on the floor, so only the motor can drag it shut from any angle. Off leaves
+# the leaf free to swing on a push or a slam.
+func set_closer(speed: float):
+	hinge.set_flag(HingeJoint3D.FLAG_ENABLE_MOTOR,speed!=0.0)
+	if speed==0.0: return
+	hinge.set_param(HingeJoint3D.PARAM_MOTOR_MAX_IMPULSE,ChaosTuning.DOOR_CLOSE_IMPULSE)
+	hinge.set_param(HingeJoint3D.PARAM_MOTOR_TARGET_VELOCITY,speed)
+
 func interact(from: Vector3):
 	if latched: set_latched(false)
 	var side = signf((global_basis.inverse()*(from-global_position)).z)
@@ -69,28 +79,32 @@ func _physics_process(delta):
 			leaf.apply_torque(Vector3.UP*side*ChaosTuning.DOOR_PUSH_ASSIST)
 			opened_for = maxf(opened_for,1.2)
 			now[body.get_instance_id()] = true
-			if body is ChaosChair and not touching.has(body.get_instance_id()): _slam(body,side)
+			if not touching.has(body.get_instance_id()): _slam(body,side)
 	touching = now
-	if closing and opened_for<=0 and gripping_hands==0:
-		var displacement = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
-		leaf.apply_torque(Vector3.UP*(-displacement*8.0-leaf.angular_velocity.y*3.0))
-	# The leaf hitting its stop after a hard swing.
 	var angle = wrapf(leaf.global_rotation.y-origin_yaw,-PI,PI)
+	if closing and opened_for<=0 and gripping_hands==0:
+		# Ease the leaf shut at a walking pace instead of letting it slam.
+		set_closer(-clampf(angle*3.0,-ChaosTuning.DOOR_CLOSE_SPEED,ChaosTuning.DOOR_CLOSE_SPEED))
+	else:
+		set_closer(0.0)
+	# The leaf hitting its stop after a hard swing.
 	var spin = absf(leaf.angular_velocity.y)
 	if absf(angle)>ChaosTuning.DOOR_STOP_ANGLE and spin>ChaosTuning.DOOR_BANG_SPIN and bang_cooldown<=0:
 		bang_cooldown = .6
 		banged.emit(clampf(spin/6.0,.3,1.0))
 
-# First contact of a moving chair: throw the leaf open, kick the chair back a
-# little and report how hard it was. The boss's seat allowance absorbs the kick.
-func _slam(chair: RigidBody3D, side: float):
+# First contact of anything moving into the leaf, the chair above all: throw the leaf
+# open, kick the chair back a little and report how hard it was. The boss's seat
+# allowance absorbs the kick.
+func _slam(body: RigidBody3D, side: float):
 	var normal = global_basis.z
-	var speed = absf(chair.linear_velocity.dot(normal))
+	var speed = absf(body.linear_velocity.dot(normal))
 	if speed<ChaosTuning.DOOR_SLAM_SPEED: return
-	leaf.apply_torque_impulse(Vector3.UP*side*speed*ChaosTuning.DOOR_SLAM_TORQUE)
-	var travel = normal*signf(chair.linear_velocity.dot(normal))
-	chair.apply_central_impulse(-travel*speed*chair.mass*ChaosTuning.DOOR_SLAM_PUSHBACK)
-	opened_for = maxf(opened_for,2.0)
+	if body is ChaosChair:
+		leaf.apply_torque_impulse(Vector3.UP*side*speed*ChaosTuning.DOOR_SLAM_TORQUE)
+		var travel = normal*signf(body.linear_velocity.dot(normal))
+		body.apply_central_impulse(-travel*speed*body.mass*ChaosTuning.DOOR_SLAM_PUSHBACK)
+		opened_for = maxf(opened_for,2.0)
 	slammed.emit(clampf((speed-ChaosTuning.DOOR_SLAM_SPEED)/3.0+.3,.3,1.0))
 
 func restore():
