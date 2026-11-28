@@ -50,10 +50,9 @@ func hold_handle():
 func release_handle():
 	gripping_hands = maxi(0,gripping_hands-1)
 
-# The auto-closer is the hinge's own motor. A torque pushed into the leaf with
-# apply_torque() is absorbed by the joint's solver and never moves it, and the leaf
-# rests on the floor, so only the motor can drag it shut from any angle. Off leaves
-# the leaf free to swing on a push or a slam.
+# The auto-closer is the hinge's own motor. The leaf drags on the floor and a plain
+# torque handed to it is swallowed by the joint solver, so the motor is what really
+# pulls the door shut. Off leaves the leaf free to swing on a push or a slam.
 func set_closer(speed: float):
 	hinge.set_flag(HingeJoint3D.FLAG_ENABLE_MOTOR,speed!=0.0)
 	if speed==0.0: return
@@ -76,7 +75,7 @@ func _physics_process(delta):
 	for body in leaf.get_colliding_bodies():
 		if body is RigidBody3D and body.collision_layer & (ChaosTuning.OBJECT|ChaosTuning.ACTOR):
 			var side = signf((global_basis.inverse()*(body.global_position-global_position)).z)
-			leaf.apply_torque(Vector3.UP*side*ChaosTuning.DOOR_PUSH_ASSIST)
+			leaf.apply_torque_impulse(Vector3.UP*side*ChaosTuning.DOOR_PUSH_ASSIST*delta)
 			opened_for = maxf(opened_for,1.2)
 			now[body.get_instance_id()] = true
 			if not touching.has(body.get_instance_id()): _slam(body,side)
